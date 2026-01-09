@@ -1,0 +1,178 @@
+{
+  "hydrology": [
+    {
+      "name": "{{state}}_{{district}}_{{tehsil}}_stream_order_raster",
+      "stac_uri": "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs/{{state}}/{{district}}/{{tehsil}}/{{state}}_{{district}}_{{tehsil}}_stream_order_raster/{{state}}_{{district}}_{{tehsil}}_stream_order_raster.json",
+      "type": "geotiff"
+    },
+    {
+      "name": "{{state}}_{{district}}_{{tehsil}}_natural_depressions_raster",
+      "stac_uri": "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs/{{state}}/{{district}}/{{tehsil}}/{{state}}_{{district}}_{{tehsil}}_natural_depressions_raster/{{state}}_{{district}}_{{tehsil}}_natural_depressions_raster.json",
+      "type": "geotiff"
+    },
+    {
+      "name": "{{state}}_{{district}}_{{tehsil}}_distance_to_upstream_drainage_line_raster",
+      "stac_uri": "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs/{{state}}/{{district}}/{{tehsil}}/{{state}}_{{district}}_{{tehsil}}_distance_to_upstream_drainage_line_raster/{{state}}_{{district}}_{{tehsil}}_distance_to_upstream_drainage_line_raster.json",
+      "type": "geotiff"
+    },
+    {
+      "name": "{{state}}_{{district}}_{{tehsil}}_catchment_area_singleflow_raster",
+      "stac_uri": "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs/{{state}}/{{district}}/{{tehsil}}/{{state}}_{{district}}_{{tehsil}}_catchment_area_singleflow_raster/{{state}}_{{district}}_{{tehsil}}_catchment_area_singleflow_raster.json",
+      "type": "geotiff"
+    },
+    {
+      "name": "{{state}}_{{district}}_{{tehsil}}_drainage_lines_vector",
+      "stac_uri": "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs/{{state}}/{{district}}/{{tehsil}}/{{state}}_{{district}}_{{tehsil}}_drainage_lines_vector/{{state}}_{{district}}_{{tehsil}}_drainage_lines_vector.json",
+      "type": "geojson"
+    },
+    {
+      "name": "{{state}}_{{district}}_{{tehsil}}_surface_water_bodies_vector",
+      "stac_uri": "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs/{{state}}/{{district}}/{{tehsil}}/{{state}}_{{district}}_{{tehsil}}_surface_water_bodies_vector/{{state}}_{{district}}_{{tehsil}}_surface_water_bodies_vector.json",
+      "type": "geojson"
+    },
+    {
+      "name": "{{state}}_{{district}}_{{tehsil}}_aquifer_vector",
+      "stac_uri": "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs/{{state}}/{{district}}/{{tehsil}}/{{state}}_{{district}}_{{tehsil}}_aquifer_vector/{{state}}_{{district}}_{{tehsil}}_aquifer_vector.json",
+      "type": "geojson"
+    }
+  ],
+  "climate": [
+    {
+      "name": "{{state}}_{{district}}_{{tehsil}}_drought_frequency_vector",
+      "stac_uri": "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs/{{state}}/{{district}}/{{tehsil}}/{{state}}_{{district}}_{{tehsil}}_drought_frequency_vector/{{state}}_{{district}}_{{tehsil}}_drought_frequency_vector.json",
+      "type": "geojson"
+    }
+  ],
+  "terrain": [
+    {
+      "name": "{{state}}_{{district}}_{{tehsil}}_terrain_raster",
+      "stac_uri": "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs/{{state}}/{{district}}/{{tehsil}}/{{state}}_{{district}}_{{tehsil}}_terrain_raster/{{state}}_{{district}}_{{tehsil}}_terrain_raster.json",
+      "type": "geotiff"
+    },
+    {
+      "name": "{{state}}_{{district}}_{{tehsil}}_terrain_vector",
+      "stac_uri": "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs/{{state}}/{{district}}/{{tehsil}}/{{state}}_{{district}}_{{tehsil}}_terrain_vector/{{state}}_{{district}}_{{tehsil}}_terrain_vector.json",
+      "type": "geojson"
+    },
+    {
+      "name": "{{state}}_{{district}}_{{tehsil}}_slope_percentage_raster",
+      "stac_uri": "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs/{{state}}/{{district}}/{{tehsil}}/{{state}}_{{district}}_{{tehsil}}_slope_percentage_raster/{{state}}_{{district}}_{{tehsil}}_slope_percentage_raster.json",
+      "type": "geotiff"
+    }
+  ],
+  "landUse": [
+    {
+      "name": "{{state}}_{{district}}_{{tehsil}}_land_use_land_cover_raster_2017",
+      "stac_uri": "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs/{{state}}/{{district}}/{{tehsil}}/{{state}}_{{district}}_{{tehsil}}_land_use_land_cover_raster_2017/{{state}}_{{district}}_{{tehsil}}_land_use_land_cover_raster_2017.json",
+      "type": "geotiff"
+    },
+    {
+      "name": "{{state}}_{{district}}_{{tehsil}}_land_use_land_cover_raster_2018",
+      "stac_uri": "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs/{{state}}/{{district}}/{{tehsil}}/{{state}}_{{district}}_{{tehsil}}_land_use_land_cover_raster_2018/{{state}}_{{district}}_{{tehsil}}_land_use_land_cover_raster_2018.json",
+      "type": "geotiff"
+    },
+    {
+      "name": "{{state}}_{{district}}_{{tehsil}}_land_use_land_cover_raster_2019",
+      "stac_uri": "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs/{{state}}/{{district}}/{{tehsil}}/{{state}}_{{district}}_{{tehsil}}_land_use_land_cover_raster_2019/{{state}}_{{district}}_{{tehsil}}_land_use_land_cover_raster_2019.json",
+      "type": "geotiff"
+    },
+    {
+      "name": "{{state}}_{{district}}_{{tehsil}}_land_use_land_cover_raster_2020",
+      "stac_uri": "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs/{{state}}/{{district}}/{{tehsil}}/{{state}}_{{district}}_{{tehsil}}_land_use_land_cover_raster_2020/{{state}}_{{district}}_{{tehsil}}_land_use_land_cover_raster_2020.json",
+      "type": "geotiff"
+    },
+    {
+      "name": "{{state}}_{{district}}_{{tehsil}}_land_use_land_cover_raster_2021",
+      "stac_uri": "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs/{{state}}/{{district}}/{{tehsil}}/{{state}}_{{district}}_{{tehsil}}_land_use_land_cover_raster_2021/{{state}}_{{district}}_{{tehsil}}_land_use_land_cover_raster_2021.json",
+      "type": "geotiff"
+    },
+    {
+      "name": "{{state}}_{{district}}_{{tehsil}}_land_use_land_cover_raster_2022",
+      "stac_uri": "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs/{{state}}/{{district}}/{{tehsil}}/{{state}}_{{district}}_{{tehsil}}_land_use_land_cover_raster_2022/{{state}}_{{district}}_{{tehsil}}_land_use_land_cover_raster_2022.json",
+      "type": "geotiff"
+    },
+    {
+      "name": "{{state}}_{{district}}_{{tehsil}}_land_use_land_cover_raster_2023",
+      "stac_uri": "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs/{{state}}/{{district}}/{{tehsil}}/{{state}}_{{district}}_{{tehsil}}_land_use_land_cover_raster_2023/{{state}}_{{district}}_{{tehsil}}_land_use_land_cover_raster_2023.json",
+      "type": "geotiff"
+    },
+    {
+      "name": "{{state}}_{{district}}_{{tehsil}}_land_use_land_cover_raster_2024",
+      "stac_uri": "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs/{{state}}/{{district}}/{{tehsil}}/{{state}}_{{district}}_{{tehsil}}_land_use_land_cover_raster_2024/{{state}}_{{district}}_{{tehsil}}_land_use_land_cover_raster_2024.json",
+      "type": "geotiff"
+    },
+    {
+      "name": "{{state}}_{{district}}_{{tehsil}}_change_cropping_reduction_raster",
+      "stac_uri": "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs/{{state}}/{{district}}/{{tehsil}}/{{state}}_{{district}}_{{tehsil}}_change_cropping_reduction_raster/{{state}}_{{district}}_{{tehsil}}_change_cropping_reduction_raster.json",
+      "type": "geotiff"
+    },
+    {
+      "name": "{{state}}_{{district}}_{{tehsil}}_change_cropping_intensity_raster",
+      "stac_uri": "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs/{{state}}/{{district}}/{{tehsil}}/{{state}}_{{district}}_{{tehsil}}_change_cropping_intensity_raster/{{state}}_{{district}}_{{tehsil}}_change_cropping_intensity_raster.json",
+      "type": "geotiff"
+    },
+    {
+      "name": "{{state}}_{{district}}_{{tehsil}}_cropping_intensity_vector",
+      "stac_uri": "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs/{{state}}/{{district}}/{{tehsil}}/{{state}}_{{district}}_{{tehsil}}_cropping_intensity_vector/{{state}}_{{district}}_{{tehsil}}_cropping_intensity_vector.json",
+      "type": "geojson"
+    },
+    {
+      "name": "{{state}}_{{district}}_{{tehsil}}_change_urbanization_raster",
+      "stac_uri": "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs/{{state}}/{{district}}/{{tehsil}}/{{state}}_{{district}}_{{tehsil}}_change_urbanization_raster/{{state}}_{{district}}_{{tehsil}}_change_urbanization_raster.json",
+      "type": "geotiff"
+    },
+    {
+      "name": "{{state}}_{{district}}_{{tehsil}}_clart_raster",
+      "stac_uri": "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs/{{state}}/{{district}}/{{tehsil}}/{{state}}_{{district}}_{{tehsil}}_clart_raster/{{state}}_{{district}}_{{tehsil}}_clart_raster.json",
+      "type": "geotiff"
+    }
+  ],
+  "treeHealth": [
+    {
+      "name": "{{state}}_{{district}}_{{tehsil}}_change_tree_cover_gain_raster",
+      "stac_uri": "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs/{{state}}/{{district}}/{{tehsil}}/{{state}}_{{district}}_{{tehsil}}_change_tree_cover_gain_raster/{{state}}_{{district}}_{{tehsil}}_change_tree_cover_gain_raster.json",
+      "type": "geotiff"
+    },
+    {
+      "name": "{{state}}_{{district}}_{{tehsil}}_change_tree_cover_loss_raster",
+      "stac_uri": "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs/{{state}}/{{district}}/{{tehsil}}/{{state}}_{{district}}_{{tehsil}}_change_tree_cover_loss_raster/{{state}}_{{district}}_{{tehsil}}_change_tree_cover_loss_raster.json",
+      "type": "geotiff"
+    },
+    {
+      "name": "{{state}}_{{district}}_{{tehsil}}_wri_restoration_raster",
+      "stac_uri": "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs/{{state}}/{{district}}/{{tehsil}}/{{state}}_{{district}}_{{tehsil}}_wri_restoration_raster/{{state}}_{{district}}_{{tehsil}}_wri_restoration_raster.json",
+      "type": "geotiff"
+    }
+  ],
+  "welfare": [
+    {
+      "name": "{{state}}_{{district}}_{{tehsil}}_nrega_vector",
+      "stac_uri": "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs/{{state}}/{{district}}/{{tehsil}}/{{state}}_{{district}}_{{tehsil}}_nrega_vector/{{state}}_{{district}}_{{tehsil}}_nrega_vector.json",
+      "type": "geojson"
+    }
+  ],
+  "administrative": [
+    {
+      "name": "{{state}}_{{district}}_{{tehsil}}_admin_boundaries_vector",
+      "stac_uri": "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs/{{state}}/{{district}}/{{tehsil}}/{{state}}_{{district}}_{{tehsil}}_admin_boundaries_vector/{{state}}_{{district}}_{{tehsil}}_admin_boundaries_vector.json",
+      "type": "geojson"
+    }
+  ],
+  "waterPlanning": [
+    {
+      "name": "{{state}}_{{district}}_{{tehsil}}_change_in_well_depth_vector",
+      "stac_uri": "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs/{{state}}/{{district}}/{{tehsil}}/{{state}}_{{district}}_{{tehsil}}_change_in_well_depth_vector/{{state}}_{{district}}_{{tehsil}}_change_in_well_depth_vector.json",
+      "type": "geojson"
+    },
+    {
+      "name": "{{state}}_{{district}}_{{tehsil}}_stage_of_groundwater_extraction_vector",
+      "stac_uri": "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs/{{state}}/{{district}}/{{tehsil}}/{{state}}_{{district}}_{{tehsil}}_stage_of_groundwater_extraction_vector/{{state}}_{{district}}_{{tehsil}}_stage_of_groundwater_extraction_vector.json",
+      "type": "geojson"
+    },
+    {
+      "name": "{{state}}_{{district}}_{{tehsil}}_water_balance_fortnightly_vector",
+      "stac_uri": "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs/{{state}}/{{district}}/{{tehsil}}/{{state}}_{{district}}_{{tehsil}}_water_balance_fortnightly_vector/{{state}}_{{district}}_{{tehsil}}_water_balance_fortnightly_vector.json",
+      "type": "geojson"
+    }
+  ]
+}

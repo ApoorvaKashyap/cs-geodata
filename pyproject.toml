@@ -1,10 +1,14 @@
 [project]
-name = "cs-geodata"
+name = "cs_geodata"
 version = "0.1.0"
 description = "Library to convert, save and load geodata from zarr and parquet formats."
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = ["requests>=2.32.5"]
 
 [dependency-groups]
-dev = ["pre-commit>=4.5.1"]
+dev = ["pre-commit>=4.5.1", "pytest>=9.0.2"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "tests"]
+addopts = ["--import-mode=importlib"]
