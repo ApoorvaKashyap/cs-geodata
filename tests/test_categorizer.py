@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from categorizer import Theme
+from src.categorizer import Theme
 
 
 class TestTheme:
