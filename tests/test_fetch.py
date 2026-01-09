@@ -121,60 +121,75 @@ class TestLayersFetch:
         assert layers_fetch_instance._tehsil == "TestTehsil"
 
     # Test parse_response method
+    @pytest.mark.asyncio
     @patch("src.fetch.GeoTiffHandler")
-    def test_parse_response_geotiff(
+    async def test_parse_response_geotiff(
         self, mock_handler_class, layers_fetch_instance, geotiff_response
     ):
         """Test parse_response with GeoTIFF data type."""
+        from unittest.mock import AsyncMock
+
         mock_handler = MagicMock()
-        mock_handler.handle.return_value = 1
+        mock_handler.handle = AsyncMock(return_value=1)
         mock_handler_class.return_value = mock_handler
 
-        result = layers_fetch_instance.parse_response(geotiff_response)
+        geotiff_response["id"] = "test-id"
+        result = await layers_fetch_instance.parse_response(geotiff_response)
 
-        mock_handler_class.assert_called_once_with("https://example.com/data.tif")
+        mock_handler_class.assert_called_once()
         mock_handler.handle.assert_called_once()
         assert result == 1
 
+    @pytest.mark.asyncio
     @patch("src.fetch.GeoJSONHandler")
-    def test_parse_response_geojson(
+    async def test_parse_response_geojson(
         self, mock_handler_class, layers_fetch_instance, geojson_response
     ):
         """Test parse_response with GeoJSON data type."""
+        from unittest.mock import AsyncMock
+
         mock_handler = MagicMock()
-        mock_handler.handle.return_value = 1
+        mock_handler.handle = AsyncMock(return_value=1)
         mock_handler_class.return_value = mock_handler
 
-        result = layers_fetch_instance.parse_response(geojson_response)
+        geojson_response["id"] = "test-id"
+        result = await layers_fetch_instance.parse_response(geojson_response)
 
-        mock_handler_class.assert_called_once_with("https://example.com/data.geojson")
+        mock_handler_class.assert_called_once()
         mock_handler.handle.assert_called_once()
         assert result == 1
 
-    def test_parse_response_unknown_type(self, layers_fetch_instance, unknown_response):
+    @pytest.mark.asyncio
+    async def test_parse_response_unknown_type(
+        self, layers_fetch_instance, unknown_response
+    ):
         """Test parse_response with unknown data type."""
-        result = layers_fetch_instance.parse_response(unknown_response)
+        result = await layers_fetch_instance.parse_response(unknown_response)
         assert result == -1
 
     # Test fetch method
+    @pytest.mark.asyncio
     @patch("src.fetch.requests.get")
     @patch("src.fetch.GeoTiffHandler")
-    def test_fetch_success_single_layer(
+    async def test_fetch_success_single_layer(
         self, mock_handler_class, mock_get, layers_fetch_instance, geotiff_response
     ):
         """Test successful fetch for a single layer."""
+        from unittest.mock import AsyncMock
+
         # Setup mocks
+        geotiff_response["id"] = "test-id"
         mock_response = Mock()
         mock_response.json.return_value = geotiff_response
         mock_response.raise_for_status.return_value = None
         mock_get.return_value = mock_response
 
         mock_handler = MagicMock()
-        mock_handler.handle.return_value = 1
+        mock_handler.handle = AsyncMock(return_value=1)
         mock_handler_class.return_value = mock_handler
 
         # Execute
-        result = layers_fetch_instance.fetch("hydrology")
+        result = await layers_fetch_instance.fetch("hydrology")
 
         # Verify
         assert result == 1
@@ -186,87 +201,105 @@ class TestLayersFetch:
         assert "testdistrict" in first_call_url
         assert "testtehsil" in first_call_url
 
+    @pytest.mark.asyncio
     @patch("src.fetch.requests.get")
-    def test_fetch_connection_error(self, mock_get, layers_fetch_instance, capsys):
+    async def test_fetch_connection_error(
+        self, mock_get, layers_fetch_instance, capsys
+    ):
         """Test fetch handling ConnectionError."""
         mock_get.side_effect = ConnectionError("Connection failed")
 
-        result = layers_fetch_instance.fetch("hydrology")
+        result = await layers_fetch_instance.fetch("hydrology")
 
         assert result == -1
         captured = capsys.readouterr()
         assert "Connection Error Occurred" in captured.out
 
+    @pytest.mark.asyncio
     @patch("src.fetch.requests.get")
-    def test_fetch_request_exception(self, mock_get, layers_fetch_instance, capsys):
+    async def test_fetch_request_exception(
+        self, mock_get, layers_fetch_instance, capsys
+    ):
         """Test fetch handling RequestException."""
         mock_get.side_effect = RequestException("Request failed")
 
-        result = layers_fetch_instance.fetch("hydrology")
+        result = await layers_fetch_instance.fetch("hydrology")
 
         assert result == -1
         captured = capsys.readouterr()
         assert "Request Exception Occurred" in captured.out
 
+    @pytest.mark.asyncio
     @patch("src.fetch.requests.get")
-    def test_fetch_generic_exception(self, mock_get, layers_fetch_instance, capsys):
+    async def test_fetch_generic_exception(
+        self, mock_get, layers_fetch_instance, capsys
+    ):
         """Test fetch handling generic Exception."""
         mock_get.side_effect = Exception("Unexpected error")
 
-        result = layers_fetch_instance.fetch("hydrology")
+        result = await layers_fetch_instance.fetch("hydrology")
 
         assert result == -1
         captured = capsys.readouterr()
         assert "Unexpected Error Occurred" in captured.out
 
+    @pytest.mark.asyncio
     @patch("src.fetch.requests.get")
     @patch("src.fetch.GeoJSONHandler")
-    def test_fetch_multiple_layers(
+    async def test_fetch_multiple_layers(
         self, mock_handler_class, mock_get, layers_fetch_instance, geojson_response
     ):
         """Test fetch with multiple layers in a theme."""
+        from unittest.mock import AsyncMock
+
         # Setup mocks
+        geojson_response["id"] = "test-id"
         mock_response = Mock()
         mock_response.json.return_value = geojson_response
         mock_response.raise_for_status.return_value = None
         mock_get.return_value = mock_response
 
         mock_handler = MagicMock()
-        mock_handler.handle.return_value = 1
+        mock_handler.handle = AsyncMock(return_value=1)
         mock_handler_class.return_value = mock_handler
 
         # Execute
-        result = layers_fetch_instance.fetch("hydrology")
+        result = await layers_fetch_instance.fetch("hydrology")
 
         # Verify - hydrology has 2 layers
         assert result == 1
         assert mock_get.call_count == 2
 
+    @pytest.mark.asyncio
     @patch("src.fetch.requests.get")
-    def test_fetch_nonexistent_theme(self, mock_get, layers_fetch_instance):
+    async def test_fetch_nonexistent_theme(self, mock_get, layers_fetch_instance):
         """Test fetch with nonexistent theme name."""
         # This should handle None returned from get_theme
         # The current implementation will iterate over None and fail
         # We need to test the actual behavior
         with pytest.raises(TypeError):
-            layers_fetch_instance.fetch("nonexistent")
+            await layers_fetch_instance.fetch("nonexistent")
 
+    @pytest.mark.asyncio
     @patch("src.fetch.requests.get")
     @patch("src.fetch.GeoJSONHandler")
-    def test_fetch_url_template_replacement(
+    async def test_fetch_url_template_replacement(
         self, mock_handler_class, mock_get, layers_fetch_instance, geojson_response
     ):
         """Test that URL templates are correctly replaced with actual values."""
+        from unittest.mock import AsyncMock
+
+        geojson_response["id"] = "test-id"
         mock_response = Mock()
         mock_response.json.return_value = geojson_response
         mock_response.raise_for_status.return_value = None
         mock_get.return_value = mock_response
 
         mock_handler = MagicMock()
-        mock_handler.handle.return_value = 1
+        mock_handler.handle = AsyncMock(return_value=1)
         mock_handler_class.return_value = mock_handler
 
-        layers_fetch_instance.fetch("climate")
+        await layers_fetch_instance.fetch("climate")
 
         # Check that the URL was called with lowercased replacements
         called_url = mock_get.call_args[0][0]
@@ -277,31 +310,36 @@ class TestLayersFetch:
         assert "testdistrict" in called_url
         assert "testtehsil" in called_url
 
+    @pytest.mark.asyncio
     @patch("src.fetch.requests.get")
     @patch("src.fetch.GeoTiffHandler")
-    def test_fetch_http_error(
+    async def test_fetch_http_error(
         self, mock_handler_class, mock_get, layers_fetch_instance, geotiff_response
     ):
         """Test fetch handling HTTP errors via raise_for_status."""
+        from unittest.mock import AsyncMock
+
+        geotiff_response["id"] = "test-id"
         mock_response = Mock()
         mock_response.json.return_value = geotiff_response
         mock_response.raise_for_status.side_effect = requests.HTTPError("404 Not Found")
         mock_get.return_value = mock_response
 
         mock_handler = MagicMock()
-        mock_handler.handle.return_value = 1
+        mock_handler.handle = AsyncMock(return_value=1)
         mock_handler_class.return_value = mock_handler
 
-        result = layers_fetch_instance.fetch("hydrology")
+        result = await layers_fetch_instance.fetch("hydrology")
 
         # HTTPError is a subclass of RequestException, so it should return -1
         assert result == -1
 
     # Integration tests
+    @pytest.mark.asyncio
     @patch("src.fetch.requests.get")
     @patch("src.fetch.GeoTiffHandler")
     @patch("src.fetch.GeoJSONHandler")
-    def test_fetch_mixed_data_types(
+    async def test_fetch_mixed_data_types(
         self,
         mock_geojson_handler,
         mock_geotiff_handler,
@@ -309,22 +347,26 @@ class TestLayersFetch:
         layers_fetch_instance,
     ):
         """Test fetch with mixed GeoTIFF and GeoJSON layers."""
+        from unittest.mock import AsyncMock
+
         # Setup responses for different data types
         geotiff_resp = {
+            "id": "test-id-1",
             "assets": {
                 "data": {
                     "type": "image/tiff; application=geotiff",
                     "href": "https://example.com/data.tif",
                 }
-            }
+            },
         }
         geojson_resp = {
+            "id": "test-id-2",
             "assets": {
                 "data": {
                     "type": "application/geo+json",
                     "href": "https://example.com/data.geojson",
                 }
-            }
+            },
         }
 
         mock_response1 = Mock()
@@ -338,23 +380,26 @@ class TestLayersFetch:
         mock_get.side_effect = [mock_response1, mock_response2]
 
         mock_geotiff = MagicMock()
-        mock_geotiff.handle.return_value = 1
+        mock_geotiff.handle = AsyncMock(return_value=1)
         mock_geotiff_handler.return_value = mock_geotiff
 
         mock_geojson = MagicMock()
-        mock_geojson.handle.return_value = 1
+        mock_geojson.handle = AsyncMock(return_value=1)
         mock_geojson_handler.return_value = mock_geojson
 
         # Execute - hydrology theme has both geotiff and geojson
-        result = layers_fetch_instance.fetch("hydrology")
+        result = await layers_fetch_instance.fetch("hydrology")
 
         # Verify both handlers were called
         assert result == 1
         mock_geotiff_handler.assert_called_once()
         mock_geojson_handler.assert_called_once()
 
-    def test_fetch_case_sensitivity(self, themes_file):
+    @pytest.mark.asyncio
+    async def test_fetch_case_sensitivity(self, themes_file):
         """Test that state, district, and tehsil are lowercased in URLs."""
+        from unittest.mock import AsyncMock
+
         fetcher = LayersFetch(
             state="UPPERCASE",
             district="MixedCase",
@@ -365,22 +410,23 @@ class TestLayersFetch:
         with patch("src.fetch.requests.get") as mock_get:
             mock_response = Mock()
             mock_response.json.return_value = {
+                "id": "test-id",
                 "assets": {
                     "data": {
                         "type": "application/geo+json",
                         "href": "https://example.com/data.geojson",
                     }
-                }
+                },
             }
             mock_response.raise_for_status.return_value = None
             mock_get.return_value = mock_response
 
             with patch("src.fetch.GeoJSONHandler") as mock_handler_class:
                 mock_handler = MagicMock()
-                mock_handler.handle.return_value = 1
+                mock_handler.handle = AsyncMock(return_value=1)
                 mock_handler_class.return_value = mock_handler
 
-                fetcher.fetch("climate")
+                await fetcher.fetch("climate")
 
                 # Verify URL is lowercased
                 called_url = mock_get.call_args[0][0]

@@ -83,9 +83,11 @@ class Downloader:
 
     async def asyncstart(self) -> None:
         """Re-initializes file and calls download() with it. Closes session if necessary"""  # noqa: E501
-        await self.download()
-        if self.new_session:
-            await self.session.close()
+        try:
+            await self.download()
+        finally:
+            if self.new_session:
+                await self.session.close()
 
     async def fetch(self, progress: bool = False, filerange: tuple = (0, "")) -> None:
         """Individual thread for fetching files.
@@ -95,7 +97,7 @@ class Downloader:
             - progress (bool or tqdm.Progress): the progress bar (or lack thereof) to update
             - filerange (tuple): the range of the file to get
         """  # noqa: E501
-        async with aiofiles.open(self.file, "wb") as fileobj:
+        async with aiofiles.open(self.file, "r+b") as fileobj:
             if "headers" not in self.aiohttp_args:
                 self.aiohttp_args["headers"] = {}
             self.aiohttp_args["headers"]["Range"] = (
@@ -111,12 +113,43 @@ class Downloader:
                         progress.update(len(chunk))
                     await fileobj.write(chunk)
 
+    async def download_single_threaded(self) -> None:
+        """Download file in a single thread when Content-Length is not available."""
+        async with self.session.request(url=self.url, **self.aiohttp_args) as response:
+            async with aiofiles.open(self.file, "wb") as fileobj:
+                if self.progress_bar:
+                    from tqdm import tqdm
+
+                    # Try to get length from headers, otherwise use unknown
+                    total = None
+                    if "Content-Length" in response.headers:
+                        total = int(response.headers["Content-Length"])
+
+                    with tqdm(total=total, unit_scale=True, unit="B") as progress:
+                        async for chunk in response.content.iter_any():
+                            progress.update(len(chunk))
+                            await fileobj.write(chunk)
+                else:
+                    async for chunk in response.content.iter_any():
+                        await fileobj.write(chunk)
+
     async def download(self) -> None:
         """Generates ranges and calls fetch() with them."""
         temp_args = self.aiohttp_args.copy()
         temp_args["method"] = "HEAD"
         async with self.session.request(url=self.url, **temp_args) as head:
+            # Check if Content-Length header exists
+            if "Content-Length" not in head.headers:
+                # Fall back to single-threaded download
+                await self.download_single_threaded()
+                return
+
             length = int(head.headers["Content-Length"])
+
+            # Create the file with the correct size before multi-threaded writes
+            async with aiofiles.open(self.file, "wb") as f:
+                await f.write(b"\0" * length)
+
             start = -1
             base = int(length / self.threads)
             ranges = []

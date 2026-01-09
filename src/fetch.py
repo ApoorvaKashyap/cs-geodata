@@ -45,7 +45,7 @@ class LayersFetch:
         self._district = district
         self._tehsil = tehsil
 
-    def parse_response(self, response: dict) -> int:
+    async def parse_response(self, response: dict) -> int:
         """Parse STAC API response and delegate to appropriate handler.
 
         Examines the response from a STAC API to determine the data type,
@@ -72,15 +72,15 @@ class LayersFetch:
             KeyError: If the response structure is invalid or missing required keys.
         """
         if response["assets"]["data"]["type"] == "image/tiff; application=geotiff":
-            handler = GeoTiffHandler(response["assets"]["data"]["href"])
-            return handler.handle()
+            handler = GeoTiffHandler(response["id"], response["assets"]["data"]["href"])
+            return await handler.handle()
         elif response["assets"]["data"]["type"] == "application/geo+json":
-            handler = GeoJSONHandler(response["assets"]["data"]["href"])
-            return handler.handle()
+            handler = GeoJSONHandler(response["id"], response["assets"]["data"]["href"])
+            return await handler.handle()
         else:
             return -1
 
-    def fetch(self, theme: str) -> int:
+    async def fetch(self, theme: str) -> int:
         """Fetch all layers for a given theme from STAC catalogs.
 
         Retrieves all layers associated with the specified theme by:
@@ -125,7 +125,7 @@ class LayersFetch:
                     .replace("{{district}}", self._district.lower())
                     .replace("{{tehsil}}", self._tehsil.lower())
                 )
-                status = self.parse_response(response.json())
+                status = await self.parse_response(response.json())
                 response.raise_for_status()
             except ConnectionError as e:
                 print(f"Connection Error Occurred:\n{e}")
