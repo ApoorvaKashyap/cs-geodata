@@ -4,10 +4,20 @@ version = "0.1.0"
 description = "Library to convert, save and load geodata from zarr and parquet formats."
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = ["requests>=2.32.5"]
+dependencies = [
+    "aiofiles>=25.1.0",
+    "aiohttp>=3.13.3",
+    "requests>=2.32.5",
+    "tqdm>=4.67.1",
+]
 
 [dependency-groups]
-dev = ["pre-commit>=4.5.1", "pytest>=9.0.2", "pytest-cov>=7.0.0"]
+dev = [
+    "pre-commit>=4.5.1",
+    "pytest>=1.3.0",
+    "pytest-asyncio>=0.25.2",
+    "pytest-cov>=7.0.0",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
