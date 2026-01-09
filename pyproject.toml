@@ -1,0 +1,10 @@
+[project]
+name = "cs-geodata"
+version = "0.1.0"
+description = "Library to convert, save and load geodata from zarr and parquet formats."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = []
+
+[dependency-groups]
+dev = ["pre-commit>=4.5.1"]
