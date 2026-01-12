@@ -1,10 +1,12 @@
+import asyncio
+
 from src.fetch import LayersFetch
 
 
-def main() -> None:
+async def main() -> None:
     layers = LayersFetch("Jharkhand", "Godda", "Sundarpahari", "data/themes.json")
-    layers.fetch("treeHealth")
+    await layers.fetch("hydrology")
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

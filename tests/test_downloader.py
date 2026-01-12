@@ -242,6 +242,10 @@ class TestDownloaderFetch:
         """Test that fetch writes data to file at correct offset."""
         file_path = tmp_path / "test.bin"
 
+        # Pre-create file since we're opening in r+b mode
+        with open(file_path, "wb") as f:
+            f.write(b"\0" * 100)
+
         with patch("aiohttp.ClientSession") as mock_session_class:
             mock_session = Mock()
             mock_session_class.return_value = mock_session
@@ -275,6 +279,10 @@ class TestDownloaderFetch:
     async def test_fetch_with_progress_bar(self, tmp_path):
         """Test fetch with progress bar updates."""
         file_path = tmp_path / "test.bin"
+
+        # Pre-create file since we're opening in r+b mode
+        with open(file_path, "wb") as f:
+            f.write(b"\0" * 100)
 
         with patch("aiohttp.ClientSession") as mock_session_class:
             mock_session = Mock()
@@ -314,6 +322,10 @@ class TestDownloaderFetch:
     async def test_fetch_sets_range_header(self, tmp_path):
         """Test that fetch sets correct Range header."""
         file_path = tmp_path / "test.bin"
+
+        # Pre-create file since we're opening in r+b mode
+        with open(file_path, "wb") as f:
+            f.write(b"\0" * 300)
 
         with patch("aiohttp.ClientSession") as mock_session_class:
             mock_session = Mock()
@@ -578,7 +590,7 @@ class TestDownloaderErrorHandling:
 
     @pytest.mark.asyncio
     async def test_download_missing_content_length(self, tmp_path):
-        """Test handling of missing Content-Length header."""
+        """Test handling of missing Content-Length header - should fall back to single-threaded download."""  # noqa: E501
         file_path = tmp_path / "test.bin"
         downloader = Downloader(
             url="https://example.com/file.bin",
@@ -592,13 +604,18 @@ class TestDownloaderErrorHandling:
         mock_head_response.__aenter__ = AsyncMock(return_value=mock_head_response)
         mock_head_response.__aexit__ = AsyncMock(return_value=None)
 
+        # Mock single-threaded download method
         with (
             patch.object(
                 downloader.session, "request", return_value=mock_head_response
             ),
-            pytest.raises(KeyError),
+            patch.object(
+                downloader, "download_single_threaded", new_callable=AsyncMock
+            ) as mock_single_download,
         ):
             await downloader.download()
+            # Verify single-threaded download was called as fallback
+            mock_single_download.assert_called_once()
 
         await downloader.session.close()
 
@@ -606,6 +623,10 @@ class TestDownloaderErrorHandling:
     async def test_fetch_network_error(self, tmp_path):
         """Test fetch handling network errors."""
         file_path = tmp_path / "test.bin"
+
+        # Pre-create file since we're opening in r+b mode
+        with open(file_path, "wb") as f:
+            f.write(b"\0" * 200)
 
         with patch("aiohttp.ClientSession") as mock_session_class:
             mock_session = Mock()
