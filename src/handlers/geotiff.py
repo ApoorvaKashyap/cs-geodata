@@ -12,9 +12,47 @@ from ..utils.downloader import Downloader
 
 
 class GeoTiffHandler:
+    """Handler for downloading, loading, and converting GeoTIFF files to Zarr format.
+
+    This class manages the complete workflow for processing GeoTIFF files:
+    1. Downloads GeoTIFF files from a URL using async multi-threaded downloads
+    2. Loads the data using rioxarray for geospatial processing
+    3. Converts and saves to Zarr format for efficient chunked access
+
+    The class maintains the dataset in memory after loading and provides
+    methods for each step of the workflow, which can be executed individually
+    or together through the handle() method.
+
+    Attributes:
+        _dataset: The loaded xarray DataArray containing GeoTIFF data.
+            Initially None, populated after calling _load().
+        _id: Unique identifier for the GeoTIFF file, used in file naming.
+        _url: Source URL from which to download the GeoTIFF file.
+        _path: Local directory path where files will be stored.
+        _downloader: Downloader instance for async file download operations.
+
+    Example:
+        >>> handler = GeoTiffHandler(
+        ...     id="elevation-data",
+        ...     url="https://example.com/elevation.tif",
+        ...     path="/data/geotiff"
+        ... )
+        >>> status = await handler.handle()
+        >>> print(f"Processing status: {status}")
+        Processing status: 1
+    """
+
     _dataset = None
 
     def __init__(self, id: str, url: str, path: str = "/tmp/geotiff") -> None:
+        """Initialize the GeoTiffHandler.
+
+        Args:
+            id: Unique identifier for the GeoTIFF file, used in naming.
+            url: URL from which to download the GeoTIFF file.
+            path: Local directory path where files will be stored.
+                Defaults to "/tmp/geotiff".
+        """
         self._id = id
         self._url = url
         self._path = path
