@@ -69,15 +69,16 @@ class LayersFetch:
 
         Args:
             response: STAC API response dictionary containing asset information.
-                Expected structure:
-                {
-                    "assets": {
-                        "data": {
-                            "type": "<mime-type>",
-                            "href": "<url-to-data>"
+                Expected structure::
+
+                    {
+                        "assets": {
+                            "data": {
+                                "type": "<mime-type>",
+                                "href": "<url-to-data>"
+                            }
                         }
                     }
-                }
 
         Returns:
             Status code from the handler (1 for success).
@@ -99,6 +100,7 @@ class LayersFetch:
         """Fetch all layers for a given theme from STAC catalogs.
 
         Retrieves all layers associated with the specified theme by:
+
         1. Getting layer configurations from the themes file
         2. Replacing template variables ({{state}}, {{district}}, {{tehsil}}) with
            actual values (lowercased)
@@ -114,9 +116,10 @@ class LayersFetch:
 
         Returns:
             Status code from the last layer processed:
-                - 1: Success
-                - -1: Error occurred (connection, request, or parsing error)
-                - 0: No layers processed (theme might be empty)
+
+            - 1: Success
+            - -1: Error occurred (connection, request, or parsing error)
+            - 0: No layers processed (theme might be empty)
 
         Raises:
             TypeError: If the theme doesn't exist and get_theme returns None.
