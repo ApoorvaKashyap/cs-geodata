@@ -1,6 +1,18 @@
-"""An optionally asynchronous multi-threaded downloader module for Python.
-- Source: https://github.com/DashLt/multithread/blob/master/multithread/__init__.py
-- License: MIT License
+"""Asynchronous multi-threaded downloader module for Python.
+
+This module provides the Downloader class for efficiently downloading files using
+multiple threads and asynchronous I/O. It uses aiohttp for HTTP requests and
+aiofiles for asynchronous file operations.
+
+Source:
+    https://github.com/DashLt/multithread/blob/master/multithread/__init__.py
+
+License:
+    MIT License
+
+Attributes:
+    name: Module name identifier.
+    __version__: Current version of the module.
 """
 
 import asyncio
@@ -14,19 +26,22 @@ __version__ = "1.0.1"
 
 
 class Downloader:
-    """
-    An optionally asynchronous multi-threaded downloader class using aiohttp
+    """Asynchronous multi-threaded file downloader using aiohttp.
+
+    This class downloads files from a URL using multiple threads to improve
+    download speed. It supports both synchronous and asynchronous interfaces,
+    with optional progress bar display.
 
     Attributes:
-
-        - url (str): The URL to download
-        - file (str or path-like object): The filename to write the download to.
-        - threads (int): The number of threads to use to download
-        - session (aiohttp.ClientSession): An existing session to use with aiohttp
-        - new_session (bool): True if a session was not passed, a new one was created
-        - progress_bar (bool): Whether to output a progress bar or not
-        - aiohttp_args (dict): Arguments to be passed in each aiohttp request.
-        If you supply a Range header using this, it will be overwritten in fetch()
+        url: The URL to download from.
+        file: The file path to write the downloaded content to.
+        threads: The number of concurrent threads to use for downloading.
+        session: The aiohttp ClientSession for making HTTP requests.
+        new_session: True if a new session was created internally, False if
+            a session was provided.
+        progress_bar: Whether to display a progress bar during download.
+        aiohttp_args: Additional arguments to pass to aiohttp requests.
+            Note: Range headers will be overwritten by the fetch method.
     """
 
     def __init__(
@@ -39,24 +54,26 @@ class Downloader:
         aiohttp_args: dict | None = None,
         create_dir: bool = True,
     ) -> None:
-        """Assigns arguments to self for when asyncstart() or start() calls download.
+        """Initialize the Downloader instance.
 
-        All arguments are assigned directly to self except for:
+        Sets up the downloader with the specified URL, file path, and options.
+        Creates parent directories if needed and initializes or reuses an
+        aiohttp session.
 
-            - session: if not passed, a ClientSession is created
-            - aiohttp_args: if the key "method" does not exist, it is set to "GET"
-            - create_dir: see parameter description
-
-        Parameters:
-
-            - url (str): The URL to download
-            - file (str or path-like object): The filename to write the download to.
-            - threads (int): The number of threads to use to download
-            - session (aiohttp.ClientSession): An existing session to use with aiohttp
-            - progress_bar (bool): Whether to output a progress bar or not
-            - aiohttp_args (dict): Arguments to be passed in each aiohttp request. If you supply a Range header using this, it will be overwritten in fetch()
-            - create_dir (bool): If true, the directories encompassing the file will be created if they do not exist already.
-        """  # noqa: E501
+        Args:
+            url: The URL to download from.
+            file: The file path to write the downloaded content to.
+            threads: The number of concurrent threads to use. Defaults to 4.
+            session: An existing aiohttp ClientSession to reuse. If None, a new
+                session will be created. Defaults to None.
+            progress_bar: Whether to display a download progress bar using tqdm.
+                Defaults to True.
+            aiohttp_args: Additional keyword arguments to pass to aiohttp requests.
+                If 'method' is not specified, it defaults to 'GET'. Any Range
+                header will be overwritten during download. Defaults to None.
+            create_dir: Whether to create parent directories for the file if they
+                don't exist. Defaults to True.
+        """
         if aiohttp_args is None:
             aiohttp_args = {"method": "GET"}
         self.url = url
@@ -77,24 +94,36 @@ class Downloader:
         self.aiohttp_args = aiohttp_args
 
     def start(self) -> None:
-        """Calls asyncstart() synchronously"""
+        """Start the download synchronously.
+
+        This is a blocking call that runs the asynchronous download process
+        in the event loop until completion.
+        """
         loop = asyncio.get_event_loop()
         loop.run_until_complete(self.asyncstart())
 
     async def asyncstart(self) -> None:
-        """Re-initializes file and calls download() with it. Closes session if necessary"""  # noqa: E501
+        """Start the download asynchronously.
+
+        Initiates the download process and ensures the session is closed
+        if it was created internally.
+        """
         await self.download()
         if self.new_session:
             await self.session.close()
 
     async def fetch(self, progress: bool = False, filerange: tuple = (0, "")) -> None:
-        """Individual thread for fetching files.
+        """Fetch a specific byte range of the file.
 
-        Parameters:
+        This method is called by multiple threads concurrently, each fetching
+        a different portion of the file based on the specified byte range.
 
-            - progress (bool or tqdm.Progress): the progress bar (or lack thereof) to update
-            - filerange (tuple): the range of the file to get
-        """  # noqa: E501
+        Args:
+            progress: The tqdm progress bar instance to update, or False if no
+                progress bar should be used. Defaults to False.
+            filerange: A tuple specifying the byte range to fetch in the format
+                (start_byte, end_byte). Defaults to (0, "").
+        """
         async with aiofiles.open(self.file, "wb") as fileobj:
             if "headers" not in self.aiohttp_args:
                 self.aiohttp_args["headers"] = {}
@@ -112,7 +141,16 @@ class Downloader:
                     await fileobj.write(chunk)
 
     async def download(self) -> None:
-        """Generates ranges and calls fetch() with them."""
+        """Download the file using multiple concurrent threads.
+
+        Performs a HEAD request to get the file size, divides it into ranges
+        based on the number of threads, and initiates concurrent fetch operations
+        for each range. Optionally displays a progress bar.
+
+        Raises:
+            KeyError: If the Content-Length header is missing from the HEAD response.
+            aiohttp.ClientError: If there are issues with HTTP requests.
+        """
         temp_args = self.aiohttp_args.copy()
         temp_args["method"] = "HEAD"
         async with self.session.request(url=self.url, **temp_args) as head:
