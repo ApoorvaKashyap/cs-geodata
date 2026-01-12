@@ -1,3 +1,18 @@
+"""Geospatial data fetching module for STAC catalogs.
+
+This module provides the LayersFetch class for retrieving geospatial data layers
+from STAC (SpatioTemporal Asset Catalog) APIs. It supports theme-based layer
+organization and handles multiple geospatial data formats including GeoTIFF and
+GeoJSON.
+
+Key features:
+    - Theme-based layer organization
+    - Geographic filtering (state, district, tehsil)
+    - Automatic format detection and handling
+    - Template-based URL construction
+    - Error handling for network and parsing failures
+"""
+
 import requests
 from requests.exceptions import ConnectionError, RequestException
 
