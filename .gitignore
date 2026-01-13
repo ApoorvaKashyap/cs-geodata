@@ -423,3 +423,4 @@ $RECYCLE.BIN/
 .tests/
 .test-data/
 *.swp
+.credentials.ini
