@@ -113,13 +113,22 @@ class TestGeoTiffHandlerDownload:
 
     @pytest.mark.asyncio
     @patch("src.handlers.geotiff.Downloader")
-    async def test_download_with_value_error_fallback(self, mock_downloader_class):
+    @patch("src.handlers.geotiff.Path")
+    async def test_download_with_value_error_fallback(
+        self, mock_path_class, mock_downloader_class
+    ):
         """Test download falls back to download() on ValueError."""
+        # Mock Path to simulate file doesn't exist
+        mock_path = Mock()
+        mock_path.is_file.return_value = False
+        mock_path_class.return_value = mock_path
+
         mock_downloader = Mock()
         mock_downloader.asyncstart = AsyncMock(side_effect=ValueError("test error"))
         mock_downloader.download = AsyncMock()
         mock_downloader.new_session = True
         mock_downloader.session = Mock()
+        mock_downloader.session.closed = False
         mock_downloader.session.close = AsyncMock()
         mock_downloader_class.return_value = mock_downloader
 
@@ -309,7 +318,9 @@ class TestGeoTiffHandlerSave:
         status = await handler._save()
 
         assert status == 1
-        mock_dataset.to_zarr.assert_called_once_with("/tmp/geotiff/test-id.zarr")
+        mock_dataset.to_zarr.assert_called_once_with(
+            "/tmp/geotiff/test-id.zarr", mode="w"
+        )
 
     @pytest.mark.asyncio
     @patch("src.handlers.geotiff.Downloader")
@@ -328,7 +339,9 @@ class TestGeoTiffHandlerSave:
         status = await handler._save()
 
         assert status == 1
-        mock_dataset.to_zarr.assert_called_once_with(f"{custom_path}/test-id.zarr")
+        mock_dataset.to_zarr.assert_called_once_with(
+            f"{custom_path}/test-id.zarr", mode="w"
+        )
 
     @pytest.mark.asyncio
     @patch("src.handlers.geotiff.Downloader")
