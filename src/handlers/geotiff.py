@@ -5,6 +5,8 @@ remote sources. It handles downloading GeoTIFF files, loading them using rioxarr
 and converting them to Zarr format for efficient storage and access.
 """
 
+from pathlib import Path
+
 import rioxarray as rxr
 import xarray as xr
 
@@ -53,10 +55,12 @@ class GeoTiffHandler:
             path: Local directory path where files will be stored.
                 Defaults to "/tmp/geotiff".
         """
-        self._id = id
-        self._url = url
-        self._path = path
-        self._downloader = Downloader(self._url, f"{self._path}/{self._id}.tif")
+        self._id: str = id
+        self._url: str = url
+        self._path: str = path
+        self._downloader: Downloader = Downloader(
+            self._url, f"{self._path}/{self._id}.tif"
+        )
         xr.set_options(keep_attrs=True)
 
     async def _download(self) -> int:
@@ -73,18 +77,21 @@ class GeoTiffHandler:
             Prints error messages to stdout when exceptions occur.
         """
         try:
+            if Path(f"{self._path}/{self._id}.tif").is_file():
+                print("GeoTIFF file already exists! Skipping Download!")
+                return 1
             await self._downloader.asyncstart()
-            return 1
+            status = 1
         except ValueError as _:
             await self._downloader.download()
-            if self._downloader.new_session:
-                await self._downloader.session.close()
-            return 1
+            status = 1
         except Exception as e:
             print(f"Error downloading GeoTIFF file: {e}")
+            status = -1
+        finally:
             if self._downloader.new_session and not self._downloader.session.closed:
                 await self._downloader.session.close()
-            return -1
+        return status
 
     async def _load(self) -> int:
         """Load the downloaded GeoTIFF file into memory.
@@ -124,7 +131,8 @@ class GeoTiffHandler:
             Prints error messages to stdout when exceptions occur.
         """
         try:
-            self._dataset.to_zarr(f"{self._path}/{self._id}.zarr")
+            # TODO: Add check for dataset updation
+            self._dataset.to_zarr(f"{self._path}/{self._id}.zarr", mode="w")
             return 1
         except Exception as e:
             print(f"Error saving GeoTIFF file: {e}")
