@@ -1,7 +1,7 @@
 [project]
-name = "cs-geodata"
+name = "cs-geodata-conv"
 version = "0.1.0"
-description = "Add your description here"
+description = "A converter for CoREStack data to cloud native forms."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
