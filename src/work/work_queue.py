@@ -2,7 +2,7 @@ from loguru import logger
 from redis.exceptions import ConnectionError as RedisConnectionError
 from rq import Queue
 
-from ..utils.redis_client import get_redis_client
+from src.utils.redis_client import get_redis_client
 
 
 def _make_queues() -> tuple[Queue, Queue]:

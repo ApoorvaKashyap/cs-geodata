@@ -6,18 +6,21 @@ import uvicorn
 from fastapi import FastAPI
 from loguru import logger
 
+from src.routers.geojson import router as geojson_router
 from src.utils.checks import check_redis_connection, check_worker_status
 from src.work.work_queue import get_status
-
-app = FastAPI()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, Any]:
     # Startup tasks
-    logger.add("/var/logs/converter.logs")
+    logger.add("logs/converter.logs", retention="10 days")
+    logger.info("Application Startup Completed!")
     yield
     # Shutdown tasks
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 @app.get(path="/")
@@ -40,13 +43,17 @@ async def read_root() -> dict[str, str]:
         }
     return {
         "status": "ok",
-        "message": f"All systems connected! ID workers: {len(workers['id'])} Layers workers: {len(workers['layers'])}",
+        "message": f"All systems connected! "
+        f"ID workers: {len(workers['id'])} Layer workers: {len(workers['layers'])}",
     }
 
 
 @app.get(path="/api/v1/status")
 async def get_jobstatus(task_id: str) -> dict[str, str]:
     return get_status(task_id)
+
+
+app.include_router(geojson_router, prefix="/api/v1")
 
 
 if __name__ == "__main__":
