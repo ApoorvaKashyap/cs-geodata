@@ -22,10 +22,15 @@ class Settings(BaseSettings):
     aws_access_key_id: str = ""
     aws_secret_access_key: SecretStr = SecretStr("")
     aws_region: str = "ap-south-1"
+    S3_BASE: str = ""
 
     # CoREStack API
     corestack_api_url: str = ""
     corestack_api_key: SecretStr = SecretStr("")
+    base_geoserver: str = ""
+
+    # Working Directory
+    temp_path: str = "/tmp/"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

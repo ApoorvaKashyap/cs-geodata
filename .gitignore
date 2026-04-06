@@ -226,3 +226,4 @@ pip-selfcheck.json
 .zed
 data/
 logs/
+.temp/

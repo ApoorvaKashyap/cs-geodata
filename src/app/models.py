@@ -34,9 +34,9 @@ class LayerConversionRequest(BaseModel):
         description="Columns shared across all layers (never prefixed).",
         default_factory=list,
     )
-    base_layer: str = Field(
-        description="Label of the layer whose global columns anchor the merge.",
-        default="",
+    base_layer: dict[str, str] = Field(
+        description="Label & path of the layer whose global columns anchor the merge.",
+        default_factory=dict,
     )
     key: str = Field(
         description="Join key shared across all layers.",
@@ -44,4 +44,11 @@ class LayerConversionRequest(BaseModel):
     )
     parquet_version: float = Field(default=1.0)
     use_prev_mapping: bool = Field(default=False)
-    layer_version: float = Field(default=1.0)
+    layer_version: str = Field(description="Version of the layer data.", default="")
+
+
+class BaseLayers(BaseModel):
+    layers: dict[Literal["mws", "farms", "forests"], LocationField] = Field(
+        description="Filetpath to base layers.",
+        default_factory=dict,
+    )

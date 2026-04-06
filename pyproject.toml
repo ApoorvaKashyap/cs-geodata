@@ -9,7 +9,11 @@ dependencies = [
     "duckdb>=1.5.1",
     "fastapi[standard]>=0.135.3",
     "loguru>=0.7.3",
+    "polars>=1.39.3",
+    "polars-st>=0.6.2",
+    "requests>=2.33.1",
     "rq>=2.7.0",
+    "s3fs>=0.4.2",
 ]
 
 [dependency-groups]

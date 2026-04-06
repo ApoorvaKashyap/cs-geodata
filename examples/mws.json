@@ -1,0 +1,56 @@
+{
+  "unit": "mws",
+  "layers": {
+    "additionalProp1": "string",
+    "additionalProp2": "string",
+    "additionalProp3": "string"
+  },
+  "output_path": "string",
+  "column_map": {
+    "additionalProp1": {
+      "drop_columns": ["string"],
+      "rename_columns": {
+        "additionalProp1": "string",
+        "additionalProp2": "string",
+        "additionalProp3": "string"
+      },
+      "column_changes": {
+        "additionalProp1": "string",
+        "additionalProp2": "string",
+        "additionalProp3": "string"
+      }
+    },
+    "additionalProp2": {
+      "drop_columns": ["string"],
+      "rename_columns": {
+        "additionalProp1": "string",
+        "additionalProp2": "string",
+        "additionalProp3": "string"
+      },
+      "column_changes": {
+        "additionalProp1": "string",
+        "additionalProp2": "string",
+        "additionalProp3": "string"
+      }
+    },
+    "additionalProp3": {
+      "drop_columns": ["string"],
+      "rename_columns": {
+        "additionalProp1": "string",
+        "additionalProp2": "string",
+        "additionalProp3": "string"
+      },
+      "column_changes": {
+        "additionalProp1": "string",
+        "additionalProp2": "string",
+        "additionalProp3": "string"
+      }
+    }
+  },
+  "common_cols": ["string"],
+  "base_layer": { "mws": "s3://geo-benchmark-data/" },
+  "key": "uid",
+  "parquet_version": 1,
+  "use_prev_mapping": false,
+  "layer_version": "s3://geo-benchmark-data/metadata/mws_layer_version.csv"
+}
