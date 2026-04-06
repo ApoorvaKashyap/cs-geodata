@@ -1,11 +1,12 @@
 import polars as pl
+from loguru import logger
 
 from src.conversion.helpers.api import get_active, get_geojson
 from src.conversion.helpers.cleaners import clean_label, clean_tehsils
 from src.work.work_queue import get_status, mq
 
 
-async def create_tehsil_map(layer: str, tehsils_t: pl.DataFrame) -> dict[str, str]:
+async def _create_tehsil_map(layer: str, tehsils_t: pl.DataFrame) -> dict[str, str]:
     tmap: dict = {}
 
     for row in tehsils_t.iter_rows():
@@ -15,12 +16,13 @@ async def create_tehsil_map(layer: str, tehsils_t: pl.DataFrame) -> dict[str, st
     return tmap
 
 
-async def _get_all_geojsons(layers: list[str]) -> dict:
+async def get_all_geojsons(layers: list[str]) -> dict:
     tehsils_t = clean_tehsils(await get_active()).collect()
     all_geojsons: dict = {}
 
     for layer in layers:
-        tmap = await create_tehsil_map(layer, tehsils_t)
+        tmap = await _create_tehsil_map(layer, tehsils_t)
+        logger.info(f"Created tehsil map for layer {layer}")
         all_geojsons[layer] = tmap
 
     return all_geojsons
@@ -33,14 +35,14 @@ async def _get_task_completion(layer: dict[str, str]) -> tuple[int, int, int, in
     pending = 0
 
     for i in layer.values():
-        status = get_status(i)
-        if status["status"] == "completed":
+        status = await get_status(i.id)
+        if status["status"] == "finished":
             completed += 1
         elif status["status"] == "failed":
             failed += 1
-        elif status["status"] == "in_progress":
+        elif status["status"] == "started":
             in_progress += 1
-        elif status["status"] == "pending":
+        elif status["status"] == "queued":
             pending += 1
 
     return (completed, failed, in_progress, pending)

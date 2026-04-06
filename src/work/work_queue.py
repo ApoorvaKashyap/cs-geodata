@@ -27,7 +27,7 @@ def _make_queues() -> tuple[Queue, Queue, Queue, Queue]:
 lq, iq, bq, mq = _make_queues()
 
 
-def get_status(task_id: str) -> dict[str, str]:
+async def get_status(task_id: str) -> dict[str, str]:
     task = lq.fetch_job(task_id)
     if not task:
         task = iq.fetch_job(task_id)
@@ -37,4 +37,4 @@ def get_status(task_id: str) -> dict[str, str]:
         task = mq.fetch_job(task_id)
     if not task:
         return {"status": "not found"}
-    return {"status": task.get_status().name}
+    return {"status": task.get_status().value}

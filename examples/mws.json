@@ -1,10 +1,6 @@
 {
   "unit": "mws",
-  "layers": {
-    "additionalProp1": "string",
-    "additionalProp2": "string",
-    "additionalProp3": "string"
-  },
+  "layers": ["aquifer"],
   "output_path": "string",
   "column_map": {
     "additionalProp1": {

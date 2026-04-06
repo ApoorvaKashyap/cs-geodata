@@ -19,9 +19,9 @@ class LayerConversionRequest(BaseModel):
         description="The basic unit of the data."
     )
     # Maps layer label -> file path or s3:// URI
-    layers: dict[str, LocationField] = Field(
-        description="Layer label to file path mapping.",
-        default_factory=dict,
+    layers: list[str] = Field(
+        description="List of all associated layers.",
+        default_factory=list,
     )
     output_path: LocationField = Field(
         description="Where to write the output Parquet file."
