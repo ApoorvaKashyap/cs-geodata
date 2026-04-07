@@ -10,8 +10,6 @@ LocationField = str | S3Path  # local path string or s3:// URI
 class ColumnMapping(BaseModel):
     drop_columns: list[str] = Field(default_factory=list)
     rename_columns: dict[str, str] = Field(default_factory=dict)
-    # Maps column name -> split strategy ("split-min-max", "only-max", etc.)
-    column_changes: dict[str, str] = Field(default_factory=dict)
 
 
 class LayerConversionRequest(BaseModel):
@@ -29,10 +27,6 @@ class LayerConversionRequest(BaseModel):
     column_map: dict[str, ColumnMapping] = Field(
         description="Per-layer column operations (drop, rename, split).",
         default_factory=dict,
-    )
-    common_cols: list[str] = Field(
-        description="Columns shared across all layers (never prefixed).",
-        default_factory=list,
     )
     base_layer: dict[str, str] = Field(
         description="Label & path of the layer whose global columns anchor the merge.",

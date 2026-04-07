@@ -1,3 +1,4 @@
+import json
 import re
 
 import polars as pl
@@ -40,3 +41,165 @@ def clean_tehsils(response: pl.DataFrame) -> pl.LazyFrame:
     )
 
     return df_tehsils.lazy()
+
+
+def rename_and_drop(
+    layer: pl.LazyFrame, rename: dict[str, str], drop: list[str]
+) -> pl.LazyFrame:
+    return (
+        layer.rename(rename, strict=False)
+        .drop(drop, strict=False)
+        .select(pl.all().name.to_lowercase())
+    )
+
+
+def get_layer_prefix(layer: str) -> str:
+    """
+    Derive a short 2-character prefix for each layer name.
+
+    Rules (in order):
+        "annual_balance"  -> first char of each part joined by "_"  -> "ab"
+        "water-balance"   -> first char of each part joined by "-"  -> "wb"
+        "aquifer"         -> first two chars                        -> "aq"
+    """
+    if "_" in layer:
+        parts = layer.split("_")
+        return parts[0][0] + parts[1][0] + "_"
+    elif "-" in layer:
+        parts = layer.split("-")
+        return parts[0][0] + parts[1][0] + "_"
+    else:
+        return layer[:2] + "_"
+
+
+def prefix_cols(
+    layer: pl.LazyFrame, layer_name: str, common_cols: list[str]
+) -> pl.LazyFrame:
+    layer_cols = layer.collect_schema().names()
+    existing_common = [c for c in common_cols if c in layer_cols]
+
+    if not existing_common:
+        return layer.select([pl.all().name.prefix(get_layer_prefix(layer_name))])
+
+    return layer.select(
+        [
+            pl.exclude(existing_common).name.prefix(get_layer_prefix(layer_name)),
+            pl.col(existing_common),
+        ]
+    )
+
+
+def split_cols(layer: pl.LazyFrame) -> pl.LazyFrame:
+    regex = r"^\s*\d+(\.\d+)?\s*(%|\s*(-|to)\s*\d+(\.\d+)?\s*%?)?\s*$"
+    regex_detect = r"^\s*\d+(\.\d+)?\s*(%|\s*(-|to)\s*\d+(\.\d+)?\s*%?)\s*$"
+    cols = [
+        name for name, dtype in layer.collect_schema().items() if dtype == pl.String
+    ]
+
+    check_results = layer.select(
+        [
+            (pl.col(c).is_not_null() & pl.col(c).str.contains(regex_detect))
+            .sum()
+            .alias(c)
+            for c in cols
+        ]
+    ).collect()
+
+    ok_cols = [c for c in cols if check_results[c][0] > 0]
+
+    derived_exprs = []
+    for c in ok_cols:
+        # Clean string: remove spaces/%, replace 'to' with '-'
+        clean_col = (
+            pl.col(c)
+            .str.replace_all(r"%", "")  # Remove %
+            .str.split(
+                r"\s*(?:-|to)\s*"
+            )  # Split on '-' or 'to' with any surrounding space
+        )
+
+        # Calculate Min
+        derived_exprs.append(
+            pl.when(pl.col(c).is_in(["-", None]) | ~pl.col(c).str.contains(regex))
+            .then(None)
+            .otherwise(
+                clean_col.list.get(0, null_on_oob=True).cast(pl.Float64, strict=False)
+            )
+            .alias(f"{c}_min")
+        )
+
+        # Calculate Max
+        derived_exprs.append(
+            pl.when(pl.col(c).is_in(["-", None]) | ~pl.col(c).str.contains(regex))
+            .then(None)
+            .otherwise(
+                # If split has 2 parts, take 2nd; else take 1st
+                pl.coalesce(
+                    [
+                        clean_col.list.get(1, null_on_oob=True),
+                        clean_col.list.get(0, null_on_oob=True),
+                    ]
+                ).cast(pl.Float64, strict=False)
+            )
+            .alias(f"{c}_max")
+        )
+
+    # 6. Apply transformations, drop originals, and sink to Parquet
+    layer = layer.with_columns(derived_exprs).drop(ok_cols)
+    return layer
+
+
+def unnest_json_cols(layer: pl.LazyFrame) -> pl.LazyFrame:
+    """
+    Unnest columns containing JSON dicts into separate columns.
+    E.g. dw_2019_2020 containing {"DeltaG": 10.0} becomes dw_deltag_2019_2020
+    """
+    schema = layer.collect_schema()
+    pattern = re.compile(r"^(.*?_)?(\d{4}(?:[-_]\d{2,4}){0,2})$")
+
+    json_cols = [
+        c for c, dtype in schema.items() if dtype == pl.String and pattern.match(c)
+    ]
+
+    if not json_cols:
+        return layer
+
+    # Attempt to sniff schema keys and types from the first non-null JSON body
+    keys = None
+    dtype = None
+    for c in json_cols:
+        sample = layer.select(pl.col(c).drop_nulls()).head(1).collect()
+        if not sample.is_empty():
+            try:
+                sample_str = sample[0, 0]
+                sample_json = json.loads(sample_str)
+                keys = list(sample_json.keys())
+
+                fields = []
+                for k, v in sample_json.items():
+                    # If it's a number, treat as Float64. Otherwise String.
+                    if isinstance(v, (int, float)):
+                        fields.append(pl.Field(k, pl.Float64))
+                    else:
+                        fields.append(pl.Field(k, pl.String))
+                dtype = pl.Struct(fields)
+                break
+            except Exception:
+                continue
+
+    if not keys or not dtype:
+        return layer
+
+    exprs = []
+
+    for c in json_cols:
+        parsed = pl.col(c).str.json_decode(dtype)
+        match = pattern.match(c)
+        prefix = match.group(1) or ""
+        suffix = match.group(2)
+
+        for k in keys:
+            new_col = f"{prefix}{k.lower()}_{suffix}"
+            exprs.append(parsed.struct.field(k).alias(new_col))
+
+    return layer.with_columns(exprs).drop(json_cols)

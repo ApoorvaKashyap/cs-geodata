@@ -1,5 +1,6 @@
 import polars as pl
 from loguru import logger
+from rq.job import Job
 
 from src.conversion.helpers.api import get_active, get_geojson
 from src.conversion.helpers.cleaners import clean_label, clean_tehsils
@@ -28,7 +29,7 @@ async def get_all_geojsons(layers: list[str]) -> dict:
     return all_geojsons
 
 
-async def _get_task_completion(layer: dict[str, str]) -> tuple[int, int, int, int]:
+async def _get_task_completion(layer: dict[str, Job]) -> tuple[int, int, int, int]:
     completed = 0
     failed = 0
     in_progress = 0
@@ -48,7 +49,7 @@ async def _get_task_completion(layer: dict[str, str]) -> tuple[int, int, int, in
     return (completed, failed, in_progress, pending)
 
 
-async def poll_completion(layers: dict[str, dict[str, str]]) -> bool:
+async def poll_completion(layers: dict[str, dict[str, Job]]) -> bool:
     for layer in layers:
         c, f, i, p = await _get_task_completion(layers[layer])
         if p > 0 or i > 0:

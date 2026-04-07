@@ -1,13 +1,9 @@
-import os
-
-from boto3 import client
 from loguru import logger
 from rq.job import Job
 
 from src.app.models import BaseLayers, LayerConversionRequest
 from src.conversion.algos.mws import run_mws_pipeline
-from src.conversion.helpers.duckdb_funcs import init_duckdb
-from src.utils.configs import settings
+from src.conversion.helpers.api import convert_base
 from src.work.work_queue import bq, lq
 
 
@@ -22,8 +18,7 @@ def handle_layers(request: LayerConversionRequest) -> dict:
 
 def layer_conversion(request: LayerConversionRequest) -> None:
     logger.info(
-        f"Starting layer conversion: unit={request.unit}, "
-        f"layers={list(request.layers.keys())}"
+        f"Starting layer conversion: unit={request.unit}, layers={list(request.layers)}"
     )
     try:
         output = run_mws_pipeline(request)
@@ -50,24 +45,3 @@ def base_layer_cache(request: BaseLayers) -> dict[str, str]:
     except Exception as e:
         logger.error(f"Base layer cache failed: {e}")
         return {}
-
-
-def convert_base(layer: str, filepath: str) -> None:
-    conn = init_duckdb()
-    try:
-        s3 = client("s3", region_name=settings.aws_region)
-        with conn:
-            os.makedirs("/tmp/layers", exist_ok=True)
-            conn.sql(
-                f"COPY (SELECT * FROM '{filepath}' ORDER BY ST_HILBERT(geom)) TO "
-                f"'/tmp/layers/{layer}.parquet' "
-                f"(FORMAT PARQUET, COMPRESSION 'ZSTD', COMPRESSION_LEVEL 15);"
-            )
-            s3.upload_file(
-                f"/tmp/layers/{layer}.parquet", f"{settings.S3_BASE + layer}.parquet"
-            )
-        conn.close()
-    except Exception as e:
-        conn.close()
-        logger.error(f"Failed to convert base layer: {e}")
-        raise

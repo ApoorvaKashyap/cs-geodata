@@ -1,50 +1,21 @@
 {
   "unit": "mws",
-  "layers": ["aquifer"],
+  "layers": [
+    "deltaG_well_depth"
+  ],
   "output_path": "string",
   "column_map": {
-    "additionalProp1": {
-      "drop_columns": ["string"],
-      "rename_columns": {
-        "additionalProp1": "string",
-        "additionalProp2": "string",
-        "additionalProp3": "string"
-      },
-      "column_changes": {
-        "additionalProp1": "string",
-        "additionalProp2": "string",
-        "additionalProp3": "string"
-      }
-    },
-    "additionalProp2": {
-      "drop_columns": ["string"],
-      "rename_columns": {
-        "additionalProp1": "string",
-        "additionalProp2": "string",
-        "additionalProp3": "string"
-      },
-      "column_changes": {
-        "additionalProp1": "string",
-        "additionalProp2": "string",
-        "additionalProp3": "string"
-      }
-    },
-    "additionalProp3": {
-      "drop_columns": ["string"],
-      "rename_columns": {
-        "additionalProp1": "string",
-        "additionalProp2": "string",
-        "additionalProp3": "string"
-      },
-      "column_changes": {
-        "additionalProp1": "string",
-        "additionalProp2": "string",
-        "additionalProp3": "string"
-      }
+    "deltaG_well_depth": {
+      "drop_columns": [
+        "area_in_ha",
+        "geom",
+        "geometry"
+      ]
     }
   },
-  "common_cols": ["string"],
-  "base_layer": { "mws": "s3://geo-benchmark-data/" },
+  "base_layer": {
+    "mws": "s3://geo-benchmark-data/MWSv2.parquet"
+  },
   "key": "uid",
   "parquet_version": 1,
   "use_prev_mapping": false,
