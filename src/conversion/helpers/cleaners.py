@@ -39,6 +39,7 @@ def clean_tehsils(response: pl.DataFrame) -> pl.LazyFrame:
         )
         .drop("district", "tehsil")
     )
+    df_tehsils = df_tehsils.rename({"label": "state_name"})
 
     return df_tehsils.lazy()
 
@@ -87,6 +88,18 @@ def prefix_cols(
             pl.col(existing_common),
         ]
     )
+
+
+def merge_col_metadata(version: pl.LazyFrame, tehsils: pl.LazyFrame) -> pl.LazyFrame:
+    version = version.rename(lambda c: c.lower())
+    tehsils = tehsils.rename(lambda c: c.lower())
+    merged = tehsils.join(
+        version,
+        left_on=["state_name", "district_name", "tehsil_name"],
+        right_on=["state", "district", "tehsil"],
+        how="left",
+    )
+    return merged
 
 
 def split_cols(layer: pl.LazyFrame) -> pl.LazyFrame:
