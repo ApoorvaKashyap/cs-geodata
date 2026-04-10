@@ -1,5 +1,5 @@
 [project]
-name = "cs-geodata-conv"
+name = "cs-geodata"
 version = "0.1.0"
 description = "A converter for CoREStack data to cloud native forms."
 readme = "README.md"

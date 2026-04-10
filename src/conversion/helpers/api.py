@@ -14,6 +14,10 @@ from tqdm import tqdm
 from src.utils.configs import settings
 
 MWS_URL_MAPPING = {
+    "soge": "https://geoserver.core-stack.org:8443/geoserver/soge/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=soge%3Asoge_vector_{tehsil}_{tehsil}&outputFormat=application%2Fjson",
+    "cropping_intensity": "https://geoserver.core-stack.org:8443/geoserver/crop_intensity/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=crop_intensity%3A{district}_{tehsil}_intensity&outputFormat=application%2Fjson",
+    "terrain": "https://geoserver.core-stack.org:8443/geoserver/terrain/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=terrain%3A{district}_{tehsil}_cluster&outputFormat=application%2Fjson",
+    "deltaG_fortnight": "https://geoserver.core-stack.org:8443/geoserver/mws_layers/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=mws_layers%3AdeltaG_fortnight_{district}_{tehsil}&outputFormat=application%2Fjson",
     "deltaG_well_depth": "https://geoserver.core-stack.org:8443/geoserver/mws_layers/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=mws_layers%3AdeltaG_well_depth_{district}_{tehsil}&outputFormat=application%2Fjson",
     "aquifer": "https://geoserver.core-stack.org:8443/geoserver/aquifer/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=aquifer%3Aaquifer_vector_{district}_{tehsil}&outputFormat=application%2Fjson",
 }
@@ -43,7 +47,9 @@ async def get_geojson(layer: str, district: str, tehsil: str) -> int:
                 f.write(response.text)
             return 0
         except Exception as e:
-            print(e)
+            logger.error(
+                f"Failed to write geojson for {layer} {district} {tehsil}: {e}"
+            )
     return -1
 
 

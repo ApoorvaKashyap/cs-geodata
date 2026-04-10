@@ -48,8 +48,8 @@ def rename_and_drop(
     layer: pl.LazyFrame, rename: dict[str, str], drop: list[str]
 ) -> pl.LazyFrame:
     return (
-        layer.rename(rename, strict=False)
-        .drop(drop, strict=False)
+        layer.drop(drop, strict=False)
+        .rename(rename, strict=False)
         .select(pl.all().name.to_lowercase())
     )
 
@@ -76,7 +76,8 @@ def get_layer_prefix(layer: str) -> str:
 def prefix_cols(
     layer: pl.LazyFrame, layer_name: str, common_cols: list[str]
 ) -> pl.LazyFrame:
-    layer_cols = layer.collect_schema().names()
+    common_cols = [c.lower() for c in common_cols]
+    layer_cols = [c.lower() for c in layer.collect_schema().names()]
     existing_common = [c for c in common_cols if c in layer_cols]
 
     if not existing_common:
@@ -116,7 +117,7 @@ def split_cols(layer: pl.LazyFrame) -> pl.LazyFrame:
             .alias(c)
             for c in cols
         ]
-    ).collect()
+    ).collect(engine="streaming")
 
     ok_cols = [c for c in cols if check_results[c][0] > 0]
 
@@ -181,7 +182,9 @@ def unnest_json_cols(layer: pl.LazyFrame) -> pl.LazyFrame:
     keys = None
     dtype = None
     for c in json_cols:
-        sample = layer.select(pl.col(c).drop_nulls()).head(1).collect()
+        sample = (
+            layer.select(pl.col(c).drop_nulls()).head(1).collect(engine="streaming")
+        )
         if not sample.is_empty():
             try:
                 sample_str = sample[0, 0]

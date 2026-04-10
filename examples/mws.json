@@ -1,15 +1,62 @@
 {
   "unit": "mws",
   "layers": [
-    "deltaG_well_depth"
+    "deltaG_well_depth",
+    "aquifer",
+    "soge",
+    "cropping_intensity",
+    "terrain",
+    "deltaG_fortnight"
   ],
   "output_path": "string",
   "column_map": {
+    "aquifer": {
+      "rename_columns": {
+        "Age": "age",
+        "Lithology_": "litho_type_code",
+        "Major_Aq_1": "aqui_type_code",
+        "Major_Aqui": "aqui_type",
+        "Principal_": "principal_soil",
+        "Recommende": "rec_interventions",
+        "aquifer_class": "aqui_class",
+        "aquifer_count": "aqui_count",
+        "yield__": "yield"
+      },
+      "drop_columns": [
+        "newcode43",
+        "area_in_ha"
+      ]
+    },
     "deltaG_well_depth": {
       "drop_columns": [
+        "area_in_ha"
+      ]
+    },
+    "deltaG_fortnight": {
+      "drop_columns": [
+        "area_in_ha"
+      ]
+    },
+    "terrain": {
+      "rename_columns": {
+        "terrainClu": "terrain_cluster"
+      },
+      "drop_columns": [
+        "area_in_ha"
+      ]
+    },
+    "cropping_intensity": {
+      "rename_columns": {
+        "total_cropable_area_ever_hydroyear_2017_2024": "croppable_area_hy_2017_2024"
+      }
+    },
+    "soge": {
+      "drop_columns": [
         "area_in_ha",
-        "geom",
-        "geometry"
+        "soge_state",
+        "soge_block",
+        "soge_district",
+        "soge_tehsil"
       ]
     }
   },

@@ -8,19 +8,14 @@ from loguru import logger
 from src.app.models import LayerConversionRequest
 from src.conversion.helpers.api import convert_base, get_active
 from src.conversion.helpers.cleaners import (
-    clean_label,
     clean_tehsils,
     merge_col_metadata,
     prefix_cols,
-    rename_and_drop,
     split_cols,
     unnest_json_cols,
 )
 from src.conversion.helpers.merge import merge_tehsils_on_layer
 from src.conversion.helpers.scheduler import get_all_geojsons, poll_completion
-from src.work.work_queue import bq
-
-_mws_layers_version: dict = {}
 
 
 async def run_mws_pipeline(request: LayerConversionRequest) -> None:
@@ -38,7 +33,7 @@ async def run_mws_pipeline(request: LayerConversionRequest) -> None:
     base = await _fetch_base(next(iter(request.base_layer.values())))
     logger.info("Fetched base successfully")
     base_cols = base.collect_schema().names()
-    base_cols.extend(["version", "tehsil", "district", "state"])
+    base_cols.extend(["version", "tehsil", "district", "state", "geometry"])
 
     # Process all the layers and return a dataframe per layer which
     # contains all the mws_id of that layer
@@ -90,7 +85,7 @@ async def _fetch_version(s3_path: str) -> pl.LazyFrame:
 async def _fetch_base(base_layer: str) -> pl.LazyFrame:
     try:
         base = pl.scan_parquet(base_layer)
-        base.collect_schema()  # force early validation
+        _ = base.collect_schema()  # force early validation
         return base
     except Exception:
         logger.warning(f"Failed to scan {base_layer}, attempting conversion...")

@@ -19,7 +19,7 @@ def merge_tehsils_on_layer(
     cols_rename: dict[str, str],
     drop_cols: list[str],
 ) -> pl.LazyFrame:
-    tehsil_data = tehsils.collect()
+    tehsil_data = tehsils.collect(engine="streaming")
     frames: list[pl.LazyFrame] = []
 
     for row in tqdm(tehsil_data.to_dicts()):
@@ -30,12 +30,13 @@ def merge_tehsils_on_layer(
 
         try:
             df = st.read_file(file_path)
-            df = rename_and_drop(df.lazy(), cols_rename, drop_cols).collect()
+            df = rename_and_drop(df.lazy(), cols_rename, drop_cols).collect(
+                engine="streaming"
+            )
             if "geometry" not in df.columns and "geom" in df.columns:
                 df = st.GeoDataFrame(df.rename({"geom": "geometry"}))
             if df.is_empty():
                 continue
-            print(tehsils.head(5))
             exprs = []
             for col_target, col_source in [
                 ("version", "algorithm version"),

@@ -18,7 +18,7 @@ async def _create_tehsil_map(layer: str, tehsils_t: pl.DataFrame) -> dict[str, s
 
 
 async def get_all_geojsons(layers: list[str]) -> dict:
-    tehsils_t = clean_tehsils(await get_active()).collect()
+    tehsils_t = clean_tehsils(await get_active()).collect(engine="streaming")
     all_geojsons: dict = {}
 
     for layer in layers:
