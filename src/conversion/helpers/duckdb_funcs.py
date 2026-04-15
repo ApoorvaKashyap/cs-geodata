@@ -23,6 +23,7 @@ def init_duckdb() -> DuckDBPyConnection:
                 TYPE s3,
                 PROVIDER credential_chain
             );""")
+        conn.execute(f"SET memory_limit = '{settings.duckdb_memory_limit}'")
 
         return conn
     except Exception as e:

@@ -10,6 +10,7 @@ from src.conversion.helpers.cleaners import clean_label, rename_and_drop
 from src.utils.configs import settings
 
 warnings.filterwarnings("ignore", category=RuntimeWarning, module="pyogrio")
+DROP_BEFORE_JOIN = ["id", "tehsil", "district", "state", "geometry"]
 
 
 # Check id, version before joining
@@ -66,3 +67,131 @@ def merge_tehsils_on_layer(
     merged = pl.concat(frames, how="diagonal_relaxed")
 
     return merged.lazy()
+
+
+def merge_all_layers(
+    layer_results: dict[str, pl.LazyFrame],
+    base: pl.LazyFrame,
+) -> pl.LazyFrame:
+    """
+    Base must arrive already renamed (uid->mws_id, geom->geometry)
+    and versioned (version=1.2). This is the caller's responsibility.
+    """
+    # Validate base has expected columns
+    base_schema = base.collect_schema().names()
+    for col in ["mws_id", "geometry", "area_in_ha", "version"]:
+        if col not in base_schema:
+            raise ValueError(f"Base layer missing expected column: '{col}'")
+
+    logger.info("Extracting location metadata from layers")
+    location_meta = _extract_location_meta(layer_results)
+    base = base.join(location_meta, on=["mws_id", "version"], how="left")
+
+    merged = base
+    for layer_name, layer_df in layer_results.items():
+        logger.info(f"Joining layer: {layer_name}")
+
+        cols_to_drop = [
+            c for c in DROP_BEFORE_JOIN if c in layer_df.collect_schema().names()
+        ]
+        layer_df = layer_df.drop(cols_to_drop, strict=False)
+
+        if "area_in_ha" in layer_df.collect_schema().names():
+            logger.warning(
+                f"Dropping area_in_ha from {layer_name} — MWSv2 is authoritative"
+            )
+            layer_df = layer_df.drop("area_in_ha")
+
+        merged = merged.join(
+            layer_df,
+            on=["mws_id", "version"],
+            how="left",
+            suffix=f"_{layer_name}",
+        )
+
+        logger.info(
+            f"Joined '{layer_name}' — "
+            f"schema width: {len(merged.collect_schema().names())} columns"
+        )
+
+    return merged
+
+
+def _extract_location_meta(
+    layer_results: dict[str, pl.LazyFrame],
+) -> pl.LazyFrame:
+    """
+    Extract mws_id + version + tehsil + district + state from layers.
+
+    Only covers MWS polygons that were in active tehsils. Polygons outside
+    active tehsils will correctly get null location metadata after the left join.
+
+    Prefers simpler layers (terrain, soge) with lowest chance of null identity cols.
+    Deduplicates on mws_id + version in case a polygon appears in multiple tehsil files.
+    """
+    preferred_order = [
+        "terrain",
+        "soge",
+        "aquifer",
+        "cropping_intensity",
+        "deltaG_fortnight",
+        "deltaG_well_depth",
+    ]
+    ordered = preferred_order + [l for l in layer_results if l not in preferred_order]
+
+    for layer_name in ordered:
+        if layer_name not in layer_results:
+            continue
+
+        layer_df = layer_results[layer_name]
+        schema = layer_df.collect_schema().names()
+
+        if all(
+            c in schema for c in ["mws_id", "version", "tehsil", "district", "state"]
+        ):
+            logger.info(f"Using '{layer_name}' as location metadata source")
+            meta = layer_df.select(
+                ["mws_id", "version", "tehsil", "district", "state"]
+            ).unique(subset=["mws_id", "version"])
+
+            # Warn if there are duplicate mws_id+version after dedup
+            # (shouldn't happen but indicates upstream data issues)
+            count = meta.collect(engine="streaming").height
+            logger.info(
+                f"Location metadata: {count} unique mws_id+version pairs from '{layer_name}'"
+            )
+            return meta
+
+    raise ValueError(
+        "No layer contains all of: mws_id, version, tehsil, district, state. "
+        "Cannot extract location metadata."
+    )
+
+
+def _get_missing_mws_ids(
+    base: pl.LazyFrame,
+    layer_results: dict[str, pl.LazyFrame],
+) -> pl.LazyFrame:
+    """
+    Identify MWSv2 polygon IDs that do not appear in any layer.
+    These are polygons outside the active tehsil list.
+    """
+    all_layer_ids = pl.concat(
+        [
+            layer_df.select(["mws_id", "version"]).unique()
+            for layer_df in layer_results.values()
+            if "mws_id" in layer_df.collect_schema().names()
+        ],
+        how="diagonal_relaxed",
+    ).unique()
+
+    base_ids = base.select(["mws_id", "version"])
+
+    missing = base_ids.join(all_layer_ids, on=["mws_id", "version"], how="anti")
+
+    missing_count = missing.collect(engine="streaming").height
+    logger.info(
+        f"Found {missing_count} MWSv2 polygons not present in any active tehsil layer"
+    )
+
+    return missing

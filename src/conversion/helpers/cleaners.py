@@ -104,8 +104,23 @@ def merge_col_metadata(version: pl.LazyFrame, tehsils: pl.LazyFrame) -> pl.LazyF
 
 
 def split_cols(layer: pl.LazyFrame) -> pl.LazyFrame:
-    regex = r"^\s*\d+(\.\d+)?\s*(%|\s*(-|to)\s*\d+(\.\d+)?\s*%?)?\s*$"
-    regex_detect = r"^\s*\d+(\.\d+)?\s*(%|\s*(-|to)\s*\d+(\.\d+)?\s*%?)\s*$"
+    # Optional word prefix like "upto ", "up to "
+    WORD_PREFIX = r"(?:[A-Za-z]+\s*)+"
+    # Core numeric pattern: optional word prefix, number, optional range/unit suffix
+    regex = (
+        r"^\s*(?:" + WORD_PREFIX + r")?"
+        r"\d+(\.\d+)?"
+        r"\s*(?:%|(?:\s*(?:-|to)\s*\d+(\.\d+)?\s*%?))?"
+        r"\s*$"
+    )
+    # detect needs at least one range/unit marker to avoid matching pure numeric cols
+    regex_detect = (
+        r"^\s*(?:" + WORD_PREFIX + r")?"
+        r"\d+(\.\d+)?"
+        r"\s*(?:%|(?:\s*(?:-|to)\s*\d+(\.\d+)?\s*%?))"
+        r"\s*$"
+    )
+
     cols = [
         name for name, dtype in layer.collect_schema().items() if dtype == pl.String
     ]
@@ -123,16 +138,17 @@ def split_cols(layer: pl.LazyFrame) -> pl.LazyFrame:
 
     derived_exprs = []
     for c in ok_cols:
-        # Clean string: remove spaces/%, replace 'to' with '-'
         clean_col = (
             pl.col(c)
-            .str.replace_all(r"%", "")  # Remove %
-            .str.split(
-                r"\s*(?:-|to)\s*"
-            )  # Split on '-' or 'to' with any surrounding space
+            .str.replace(r"(?i)^\s*(?:[A-Za-z]+\s*)+", "")  # strip word prefix
+            .str.replace_all(r"%", "")  # strip %
+            .str.replace_all(
+                r"\s+", ""
+            )  # strip ALL spaces (handles "30 -200", "2160 to4752")
+            .str.replace(r"(?i)to", "-")  # normalise "to" -> "-"
+            .str.split("-")  # split on "-"
         )
 
-        # Calculate Min
         derived_exprs.append(
             pl.when(pl.col(c).is_in(["-", None]) | ~pl.col(c).str.contains(regex))
             .then(None)
@@ -142,12 +158,10 @@ def split_cols(layer: pl.LazyFrame) -> pl.LazyFrame:
             .alias(f"{c}_min")
         )
 
-        # Calculate Max
         derived_exprs.append(
             pl.when(pl.col(c).is_in(["-", None]) | ~pl.col(c).str.contains(regex))
             .then(None)
             .otherwise(
-                # If split has 2 parts, take 2nd; else take 1st
                 pl.coalesce(
                     [
                         clean_col.list.get(1, null_on_oob=True),
@@ -158,7 +172,6 @@ def split_cols(layer: pl.LazyFrame) -> pl.LazyFrame:
             .alias(f"{c}_max")
         )
 
-    # 6. Apply transformations, drop originals, and sink to Parquet
     layer = layer.with_columns(derived_exprs).drop(ok_cols)
     return layer
 
