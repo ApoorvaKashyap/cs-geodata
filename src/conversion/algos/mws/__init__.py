@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 from pathlib import Path
 
 import polars as pl
@@ -21,6 +22,7 @@ from src.conversion.helpers.merge import (
     merge_tehsils_on_layer,
 )
 from src.conversion.helpers.scheduler import get_all_geojsons, poll_completion
+from src.utils.configs import settings
 
 COMMON_COLS = [
     "mws_id",
@@ -62,33 +64,98 @@ async def run_mws_pipeline(request: LayerConversionRequest) -> None:
     if missing_df.height > 0:
         logger.warning(
             f"{missing_df.height} MWSv2 polygons are outside active tehsils. "
-            f"They will appear in output with null layer values. "
-            f"Sample IDs: {missing_df['mws_id'].head(5).to_list()}"
+            + "They will appear in output with null layer values. "
+            + f"Sample IDs: {missing_df['mws_id'].head(5).to_list()}"
         )
 
     logger.info("Merging all layers onto base")
     merged = merge_all_layers(layer_results, base)
 
-    logger.info(f"Sinking merged parquet to {request.output_path}")
+    logger.info(
+        f"Sinking merged parquet to temporrary file: {settings.temp_path}/merged.parquet"
+    )
     # final = merged.collect(engine="streaming").to_arrow()
-    merged.sink_parquet(request.output_path, compression="zstd", row_group_size=100000)
+    merged.sink_parquet(
+        f"{settings.temp_path}merged.parquet",
+        compression="zstd",
+        row_group_size=100000,
+    )
 
-    # conn = init_duckdb()
-    # conn.register("final", final)
-    # conn.execute(f"""
-    # COPY (
-    #     SELECT
-    #         * EXCLUDE (geometry),
-    #         ST_GeomFromWKB(geometry) AS geometry,
-    #         ST_Extent(ST_GeomFromWKB(geometry)) AS bbox
-    #     FROM final
-    #     ORDER BY ST_Hilbert(ST_GeomFromWKB(geometry))
-    # )
-    # TO '{request.output_path}'
-    # WITH (FORMAT 'PARQUET', ROW_GROUP_SIZE 100000, COMPRESSION 'ZSTD');
-    # """)
-    # conn.unregister("final")
-    # conn.close()
+    logger.info(f"Writing geoparquet to output path: {request.output_path}")
+    await write_geoparquet(f"{settings.temp_path}merged.parquet", request.output_path)
+
+    logger.info("Cleaning Up...")
+    clean(settings.temp_path)
+
+
+def clean(temp_path: str) -> None:
+    for file in os.listdir(temp_path):
+        if "geojson" in file:
+            os.remove(f"{temp_path}/{file}")
+    os.remove(f"{temp_path}/merged.parquet")
+
+
+async def write_geoparquet(input_path: str, output_path: str) -> None:
+    conn = init_duckdb()
+    _ = conn.execute(f"""
+        SET threads=2;
+        SET preserve_insertion_order=false;
+
+        COPY (
+            SELECT
+                -- geometry with CRS
+                geom AS geometry,
+
+                -- create bbox here
+                STRUCT_PACK(
+                    xmin := ST_XMin(geom),
+                    ymin := ST_YMin(geom),
+                    xmax := ST_XMax(geom),
+                    ymax := ST_YMax(geom)
+                ) AS bbox,
+
+                -- derive tiles (using same bbox logic inline)
+                FLOOR((ST_XMin(geom) + ST_XMax(geom)) / 2 * 5) AS tile_x,
+                FLOOR((ST_YMin(geom) + ST_YMax(geom)) / 2 * 5) AS tile_y,
+
+                -- other columns
+                * EXCLUDE (geometry)
+
+            FROM (
+                SELECT
+                    *,
+                    ST_SetCRS(ST_GeomFromWKB(geometry), 'EPSG:4326') AS geom
+                FROM read_parquet('{input_path}')
+            )
+        )
+        TO '{output_path}'
+        WITH (
+            FORMAT 'PARQUET',
+            COMPRESSION 'ZSTD',
+            ROW_GROUP_SIZE 30000,
+            PARTITION_BY (tile_x, tile_y)
+        );""")
+    _ = conn.execute(f"""
+        COPY (
+            SELECT
+                FLOOR(((bbox.xmin + bbox.xmax)/2) * 5) AS tile_x,
+                FLOOR(((bbox.ymin + bbox.ymax)/2) * 5) AS tile_y,
+
+                ST_SetCRS(ST_GeomFromWKB(geometry), 'EPSG:4326') AS geometry,
+                bbox,
+                * EXCLUDE (geometry)
+
+            FROM read_parquet('{input_path}')
+        )
+        TO '{output_path}'
+        WITH (
+            FORMAT 'PARQUET',
+            PARTITION_BY (tile_x, tile_y),
+            ROW_GROUP_SIZE 30000,
+            COMPRESSION 'ZSTD'
+        );
+    """)
+    conn.close()
 
 
 async def _process_layer(

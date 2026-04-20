@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     aws_access_key_id: str = ""
     aws_secret_access_key: SecretStr = SecretStr("")
     aws_region: str = "ap-south-1"
-    S3_BASE: str = ""
+    s3_base: str = ""
 
     # CoREStack API
     corestack_api_url: str = ""
@@ -31,6 +31,11 @@ class Settings(BaseSettings):
 
     # Working Directory
     temp_path: str = "/tmp/"
+
+    # Raw Admin Bounds Files
+    state_bounds: str = ""
+    district_bounds: str = ""
+    tehsil_bounds: str = ""
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
