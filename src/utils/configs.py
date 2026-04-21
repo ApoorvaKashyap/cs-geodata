@@ -33,8 +33,6 @@ class Settings(BaseSettings):
     temp_path: str = "/tmp/"
 
     # Raw Admin Bounds Files
-    state_bounds: str = ""
-    district_bounds: str = ""
     tehsil_bounds: str = ""
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}

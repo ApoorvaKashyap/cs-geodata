@@ -23,26 +23,19 @@
         "aquifer_count": "aqui_count",
         "yeild__": "yield"
       },
-      "drop_columns": [
-        "newcode43",
-        "area_in_ha"
-      ]
+      "drop_columns": ["newcode43", "area_in_ha"]
     },
     "deltaG_well_depth": {
       "rename_columns": {
         "uid": "mws_id"
       },
-      "drop_columns": [
-        "area_in_ha"
-      ]
+      "drop_columns": ["area_in_ha"]
     },
     "deltaG_fortnight": {
       "rename_columns": {
         "uid": "mws_id"
       },
-      "drop_columns": [
-        "area_in_ha"
-      ]
+      "drop_columns": ["area_in_ha"]
     },
     "terrain": {
       "rename_columns": {
@@ -50,18 +43,14 @@
         "terrainClu": "terrain_cluster",
         "valley_are": "valley_area"
       },
-      "drop_columns": [
-        "area_in_ha"
-      ]
+      "drop_columns": ["area_in_ha"]
     },
     "cropping_intensity": {
       "rename_columns": {
         "uid": "mws_id",
         "total_cropable_area_ever_hydroyear_2017_2024": "croppable_area_hy_2017_2024"
       },
-      "drop_columns": [
-        "area_in_ha"
-      ]
+      "drop_columns": ["area_in_ha"]
     },
     "soge": {
       "rename_columns": {
@@ -79,7 +68,7 @@
     }
   },
   "base_layer": {
-    "mws": "s3://geo-benchmark-data/MWSv2.parquet"
+    "mws": "s3://geo-benchmark-data/base_converted/MWSv2.parquet"
   },
   "key": "uid",
   "parquet_version": 1,

@@ -102,6 +102,11 @@ def merge_all_layers(
             )
             layer_df = layer_df.drop("area_in_ha")
 
+        # Deduplicate: polygons spanning multiple tehsils appear in
+        # multiple GeoJSON files. Without this, sequential left joins
+        # fan out multiplicatively (2^N_layers duplicates per polygon).
+        layer_df = layer_df.unique(subset=["mws_id", "version"])
+
         merged = merged.join(
             layer_df,
             on=["mws_id", "version"],
