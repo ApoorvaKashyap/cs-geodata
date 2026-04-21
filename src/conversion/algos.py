@@ -127,6 +127,8 @@ async def run_mws_pipeline(request: LayerConversionRequest) -> None:
     import shutil
 
     shutil.rmtree(tmpdir, ignore_errors=True)
+    for path in Path(settings.temp_path).glob("**/*.geojson"):
+        path.unlink()
 
 
 async def _write_geoparquet(merged: pl.LazyFrame, output_path: str) -> None:
@@ -139,7 +141,6 @@ async def _write_geoparquet(merged: pl.LazyFrame, output_path: str) -> None:
         merged: The final merged lazy dataframe to write.
         output_path: Target directory path for the partitioned output.
     """
-    import json as _json
 
     # Compute global bounds across all partitions first
     logger.info("Computing global geometry bounds")

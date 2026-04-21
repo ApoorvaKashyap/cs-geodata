@@ -2,7 +2,7 @@ from loguru import logger
 from rq.job import Job
 
 from src.app.models import BaseLayers, LayerConversionRequest
-from src.conversion.algos.mws import run_mws_pipeline
+from src.conversion.algos import run_mws_pipeline
 from src.conversion.helpers.api import convert_base
 from src.work.work_queue import bq, lq
 

@@ -52,7 +52,7 @@ async def get_geojson(layer: str, district: str, tehsil: str) -> int:
     logger.info(
         f"Fetching geojson for layer {layer} "
         f"and district {district} and tehsil {tehsil} "
-        f"using url {url}"
+        f"using url: {url}"
     )
     response = requests.get(url)
     if response.status_code == 200:
