@@ -8,6 +8,17 @@ from src.utils.configs import settings
 
 
 def init_duckdb() -> DuckDBPyConnection:
+    """Initialize a DuckDB connection with required extensions and settings.
+
+    Sets up a temporary DuckDB database file, loads spatial and S3 extensions,
+    and configures AWS credentials using the default credential chain.
+
+    Returns:
+        An active DuckDB connection object.
+
+    Raises:
+        RuntimeError: If DuckDB initialization fails.
+    """
     extensions = ["httpfs", "spatial", "aws"]
     try:
         conn = duckdb.connect(f"/tmp/duckdb_{random.randint(0, 10000)}.db")

@@ -24,6 +24,11 @@ MWS_URL_MAPPING = {
 
 
 async def get_active() -> pl.DataFrame:
+    """Fetch the list of active locations from the CoreStack API.
+
+    Returns:
+        A polars DataFrame containing the active locations JSON response.
+    """
     response = requests.get(
         f"{settings.corestack_api_url}/get_active_locations/",
         headers={"X-API-KEY": f"{settings.corestack_api_key.get_secret_value()}"},
@@ -33,6 +38,16 @@ async def get_active() -> pl.DataFrame:
 
 
 async def get_geojson(layer: str, district: str, tehsil: str) -> int:
+    """Download a GeoJSON file from GeoServer for a specific tehsil layer.
+
+    Args:
+        layer: The name of the layer to fetch.
+        district: The district slug name.
+        tehsil: The tehsil slug name.
+
+    Returns:
+        0 if the download was successful, -1 otherwise.
+    """
     url = MWS_URL_MAPPING[layer].format(district=district, tehsil=tehsil)
     logger.info(
         f"Fetching geojson for layer {layer} and district {district} and tehsil {tehsil}"
@@ -56,6 +71,16 @@ async def get_geojson(layer: str, district: str, tehsil: str) -> int:
 async def convert_base(
     input_path: str, output_path: str, chunk_size: int = 500000
 ) -> bool:
+    """Asynchronously convert a base layer to Parquet format.
+
+    Args:
+        input_path: Path or URI of the input file.
+        output_path: Destination path for the converted Parquet file.
+        chunk_size: Number of rows to process per chunk. Defaults to 500000.
+
+    Returns:
+        True if conversion succeeded, False otherwise.
+    """
     if input_path == output_path:
         logger.error(
             "Input and output paths are identical. This would truncate the source file."
@@ -70,6 +95,16 @@ async def convert_base(
 
 
 def _convert_base_sync(input_path: str, output_path: str, chunk_size: int) -> bool:
+    """Synchronously process the base layer conversion using pyogrio.
+
+    Args:
+        input_path: Path or URI of the input file.
+        output_path: Destination path for the converted Parquet file.
+        chunk_size: Number of rows to process per chunk.
+
+    Returns:
+        True if conversion succeeded, False otherwise.
+    """
     warnings.filterwarnings("ignore", category=RuntimeWarning, module="pyogrio")
 
     try:

@@ -38,6 +38,16 @@ COMMON_COLS = [
 
 
 async def run_mws_pipeline(request: LayerConversionRequest) -> None:
+    """Run the main MWS data pipeline to merge layers onto a base dataset.
+
+    This function fetches active tehsils, downloads the base layer, processes
+    requested additional layers, merges them, fills missing admin boundaries,
+    and sinks the final dataset to partitioned GeoParquet.
+
+    Args:
+        request: Configuration for the pipeline run, including layers, paths,
+            and column mappings.
+    """
     import tempfile
 
     tmpdir = tempfile.mkdtemp()
@@ -120,6 +130,15 @@ async def run_mws_pipeline(request: LayerConversionRequest) -> None:
 
 
 async def _write_geoparquet(merged: pl.LazyFrame, output_path: str) -> None:
+    """Write the merged dataframe to partitioned GeoParquet using DuckDB.
+
+    Computes global bounding box, partitions data by state, and writes
+    GeoParquet files compatible with spec 1.1.0.
+
+    Args:
+        merged: The final merged lazy dataframe to write.
+        output_path: Target directory path for the partitioned output.
+    """
     import json as _json
 
     # Compute global bounds across all partitions first
@@ -231,9 +250,14 @@ async def _write_geoparquet(merged: pl.LazyFrame, output_path: str) -> None:
 
 
 def _fix_geoparquet_metadata(file_path: str, global_bbox: list[float]) -> None:
-    """
-    Override the per-file bbox in GeoParquet metadata with the global bbox
-    spanning all partitions, and upgrade to spec version 1.1.0.
+    """Override the per-file bbox in GeoParquet metadata with the global bbox.
+
+    This spans all partitions and upgrades to spec version 1.1.0, ensuring
+    correct metadata for the `bbox` struct column.
+
+    Args:
+        file_path: Path to the written Parquet file.
+        global_bbox: Bounding box [xmin, ymin, xmax, ymax] covering all data.
     """
     import json as _json
 
@@ -271,6 +295,15 @@ async def _process_layer(
     tehsils: pl.LazyFrame,
     request: LayerConversionRequest,
 ) -> dict[str, pl.LazyFrame]:
+    """Process all requested layers by merging tehsil-level GeoJSONs.
+
+    Args:
+        tehsils: Dataframe containing active tehsil boundaries/metadata.
+        request: The pipeline request containing layer configurations.
+
+    Returns:
+        A dictionary mapping layer names to their merged lazy dataframes.
+    """
     results: dict[str, pl.LazyFrame] = {}
 
     work = await get_all_geojsons(request.layers)
@@ -294,11 +327,30 @@ async def _process_layer(
 
 
 async def _fetch_version(s3_path: str) -> pl.LazyFrame:
+    """Fetch the layer version metadata CSV from S3.
+
+    Args:
+        s3_path: The S3 path to the layer version CSV.
+
+    Returns:
+        A lazy dataframe containing the version metadata sorted by state.
+    """
     df = pl.read_csv(s3_path)
     return df.sort("State").lazy()
 
 
 async def _fetch_base(base_layer: str) -> pl.LazyFrame:
+    """Fetch the base MWS layer, converting it to Parquet if needed.
+
+    Args:
+        base_layer: Path or URI to the base layer.
+
+    Returns:
+        A lazy dataframe of the base layer.
+
+    Raises:
+        ValueError: If base layer conversion fails.
+    """
     try:
         base = pl.scan_parquet(base_layer)
         _ = base.collect_schema()

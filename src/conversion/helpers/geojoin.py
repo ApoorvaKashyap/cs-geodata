@@ -10,6 +10,20 @@ def fill_missing_admin_boundaries(
     merged: pl.LazyFrame,
     tehsils_path: str,
 ) -> pl.LazyFrame:
+    """Fill missing administrative boundaries using a spatial join.
+
+    Performs a point-in-polygon spatial join between the centroids of MWS polygons
+    (that lack admin data) and the tehsil boundaries. Batches the operation to
+    avoid memory limits in DuckDB.
+
+    Args:
+        merged: LazyFrame containing the merged MWS data.
+        tehsils_path: Path to the raw tehsil boundaries shapefile/geopackage.
+
+    Returns:
+        A LazyFrame with filled state, district, and tehsil columns for previously
+        unknown polygons, keeping them null if they fall outside India's bounds.
+    """
     logger.info("Loading tehsil boundaries")
 
     has_admin = merged.filter(pl.col("state").is_not_null())

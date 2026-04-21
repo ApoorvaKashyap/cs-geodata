@@ -8,6 +8,15 @@ from src.work.work_queue import get_status, mq
 
 
 async def _create_tehsil_map(layer: str, tehsils_t: pl.DataFrame) -> dict[str, str]:
+    """Enqueue GeoJSON download tasks for a layer across all active tehsils.
+
+    Args:
+        layer: The name of the layer.
+        tehsils_t: DataFrame containing tehsil information.
+
+    Returns:
+        A dictionary mapping task IDs to rq Job objects.
+    """
     tmap: dict = {}
 
     for row in tehsils_t.iter_rows():
@@ -18,6 +27,14 @@ async def _create_tehsil_map(layer: str, tehsils_t: pl.DataFrame) -> dict[str, s
 
 
 async def get_all_geojsons(layers: list[str]) -> dict:
+    """Queue GeoJSON downloads for multiple layers.
+
+    Args:
+        layers: List of layer names to download.
+
+    Returns:
+        A dictionary mapping layer names to their corresponding tehsil task maps.
+    """
     tehsils_t = clean_tehsils(await get_active()).collect(engine="streaming")
     all_geojsons: dict = {}
 
@@ -30,6 +47,14 @@ async def get_all_geojsons(layers: list[str]) -> dict:
 
 
 async def _get_task_completion(layer: dict[str, Job]) -> tuple[int, int, int, int]:
+    """Get the completion status counts for a layer's download tasks.
+
+    Args:
+        layer: Dictionary of task IDs to Job objects.
+
+    Returns:
+        A tuple of (completed, failed, in_progress, pending) counts.
+    """
     completed = 0
     failed = 0
     in_progress = 0
@@ -50,6 +75,15 @@ async def _get_task_completion(layer: dict[str, Job]) -> tuple[int, int, int, in
 
 
 async def poll_completion(layers: dict[str, dict[str, Job]]) -> bool:
+    """Check if all queued tasks for the given layers have completed.
+
+    Args:
+        layers: Dictionary mapping layer names to their task maps.
+
+    Returns:
+        True if all tasks have finished or failed, False if any are still
+        pending or in progress.
+    """
     for layer in layers:
         c, f, i, p = await _get_task_completion(layers[layer])
         if p > 0 or i > 0:

@@ -13,13 +13,26 @@ warnings.filterwarnings("ignore", category=RuntimeWarning, module="pyogrio")
 DROP_BEFORE_JOIN = ["id", "tehsil", "district", "state", "geometry"]
 
 
-# Check id, version before joining
 def merge_tehsils_on_layer(
     layer: str,
     tehsils: pl.LazyFrame,
     cols_rename: dict[str, str],
     drop_cols: list[str],
 ) -> pl.LazyFrame:
+    """Merge all tehsil-level GeoJSONs for a specific layer.
+
+    Args:
+        layer: Name of the layer being processed.
+        tehsils: Dataframe containing active tehsil metadata (name, district, state).
+        cols_rename: Dictionary mapping original column names to target names.
+        drop_cols: List of columns to drop from the individual GeoJSONs.
+
+    Returns:
+        A concatenated LazyFrame containing data from all found tehsil files.
+
+    Raises:
+        ValueError: If no valid GeoJSON files were found for the layer.
+    """
     tehsil_data = tehsils.collect(engine="streaming")
     frames: list[pl.LazyFrame] = []
 
@@ -73,9 +86,20 @@ def merge_all_layers(
     layer_results: dict[str, pl.LazyFrame],
     base: pl.LazyFrame,
 ) -> pl.LazyFrame:
-    """
+    """Merge all processed layer dataframes onto the base dataset.
+
     Base must arrive already renamed (uid->mws_id, geom->geometry)
     and versioned (version=1.2). This is the caller's responsibility.
+
+    Args:
+        layer_results: Dictionary of layer names mapped to their LazyFrames.
+        base: The base MWS LazyFrame.
+
+    Returns:
+        The fully merged LazyFrame containing all layers joined on mws_id and version.
+
+    Raises:
+        ValueError: If the base layer is missing expected columns.
     """
     # Validate base has expected columns
     base_schema = base.collect_schema().names()
@@ -125,14 +149,23 @@ def merge_all_layers(
 def _extract_location_meta(
     layer_results: dict[str, pl.LazyFrame],
 ) -> pl.LazyFrame:
-    """
-    Extract mws_id + version + tehsil + district + state from layers.
+    """Extract authoritative location metadata from the layers.
 
+    Retrieves mws_id + version + tehsil + district + state from layers.
     Only covers MWS polygons that were in active tehsils. Polygons outside
     active tehsils will correctly get null location metadata after the left join.
 
     Prefers simpler layers (terrain, soge) with lowest chance of null identity cols.
     Deduplicates on mws_id + version in case a polygon appears in multiple tehsil files.
+
+    Args:
+        layer_results: Dictionary mapping layer names to their LazyFrames.
+
+    Returns:
+        A LazyFrame containing unique location mappings for mws_ids.
+
+    Raises:
+        ValueError: If no single layer contains all necessary location columns.
     """
     preferred_order = [
         "terrain",
@@ -177,9 +210,16 @@ def _get_missing_mws_ids(
     base: pl.LazyFrame,
     layer_results: dict[str, pl.LazyFrame],
 ) -> pl.LazyFrame:
-    """
-    Identify MWSv2 polygon IDs that do not appear in any layer.
-    These are polygons outside the active tehsil list.
+    """Identify MWSv2 polygon IDs that do not appear in any layer.
+
+    These are typically polygons outside the active tehsil list.
+
+    Args:
+        base: The base MWS LazyFrame.
+        layer_results: Dictionary mapping layer names to their LazyFrames.
+
+    Returns:
+        A LazyFrame containing the missing mws_id and version pairs.
     """
     all_layer_ids = pl.concat(
         [

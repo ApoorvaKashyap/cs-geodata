@@ -5,21 +5,35 @@ import polars as pl
 
 
 def clean_label(label: str) -> str:
-    """
-    Normalise a location label to a safe, lowercase slug.
+    """Normalise a location label to a safe, lowercase slug.
+
     Collapses any run of non-alphanumeric characters to a single underscore
     and strips leading/trailing underscores.
 
-    Examples
-    --------
-    "Raipur District"  -> "raipur_district"
-    "North-East Delhi" -> "north_east_delhi"
-    "  Pune  "         -> "pune"
+    Args:
+        label: The original label string.
+
+    Returns:
+        The cleaned label string.
+
+    Examples:
+        "Raipur District"  -> "raipur_district"
+        "North-East Delhi" -> "north_east_delhi"
+        "  Pune  "         -> "pune"
     """
     return re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")
 
 
 def clean_tehsils(response: pl.DataFrame) -> pl.LazyFrame:
+    """Extract and normalize tehsils from the active areas API response.
+
+    Args:
+        response: The raw DataFrame containing nested district/tehsil data.
+
+    Returns:
+        A LazyFrame exploded to the tehsil level with state_name, district_name,
+        and tehsil_name.
+    """
     df_districts = response.explode("district").with_columns(
         [
             pl.col("district").struct.field("label").alias("district_name"),
@@ -47,6 +61,16 @@ def clean_tehsils(response: pl.DataFrame) -> pl.LazyFrame:
 def rename_and_drop(
     layer: pl.LazyFrame, rename: dict[str, str], drop: list[str]
 ) -> pl.LazyFrame:
+    """Rename columns and drop specified columns from a layer.
+
+    Args:
+        layer: The layer LazyFrame to process.
+        rename: Dictionary mapping original names to target names.
+        drop: List of column names to drop.
+
+    Returns:
+        The processed LazyFrame with lowercased column names.
+    """
     return (
         layer.drop(drop, strict=False)
         .rename(rename, strict=False)
@@ -55,13 +79,18 @@ def rename_and_drop(
 
 
 def get_layer_prefix(layer: str) -> str:
-    """
-    Derive a short 2-character prefix for each layer name.
+    """Derive a short 2-character prefix for each layer name.
 
     Rules (in order):
-        "annual_balance"  -> first char of each part joined by "_"  -> "ab"
-        "water-balance"   -> first char of each part joined by "-"  -> "wb"
-        "aquifer"         -> first two chars                        -> "aq"
+        "annual_balance"  -> first char of each part joined by "_"  -> "ab_"
+        "water-balance"   -> first char of each part joined by "-"  -> "wb_"
+        "aquifer"         -> first two chars + "_"                  -> "aq_"
+
+    Args:
+        layer: The full layer name.
+
+    Returns:
+        A 2-3 character string prefix.
     """
     if "_" in layer:
         parts = layer.split("_")
@@ -76,6 +105,16 @@ def get_layer_prefix(layer: str) -> str:
 def prefix_cols(
     layer: pl.LazyFrame, layer_name: str, common_cols: list[str]
 ) -> pl.LazyFrame:
+    """Prefix non-common columns with the derived layer prefix.
+
+    Args:
+        layer: The layer LazyFrame.
+        layer_name: Name of the layer used to derive the prefix.
+        common_cols: List of common column names to exclude from prefixing.
+
+    Returns:
+        The LazyFrame with specific columns prefixed.
+    """
     common_cols = [c.lower() for c in common_cols]
     layer_cols = [c.lower() for c in layer.collect_schema().names()]
     existing_common = [c for c in common_cols if c in layer_cols]
@@ -92,6 +131,15 @@ def prefix_cols(
 
 
 def merge_col_metadata(version: pl.LazyFrame, tehsils: pl.LazyFrame) -> pl.LazyFrame:
+    """Join layer version metadata with active tehsil information.
+
+    Args:
+        version: LazyFrame containing version metadata.
+        tehsils: LazyFrame containing tehsil information.
+
+    Returns:
+        A merged LazyFrame combining version metadata with tehsil identities.
+    """
     version = version.rename(lambda c: c.lower())
     tehsils = tehsils.rename(lambda c: c.lower())
     merged = tehsils.join(
@@ -104,6 +152,18 @@ def merge_col_metadata(version: pl.LazyFrame, tehsils: pl.LazyFrame) -> pl.LazyF
 
 
 def split_cols(layer: pl.LazyFrame) -> pl.LazyFrame:
+    """Split range-based string columns into min/max numeric columns.
+
+    Detects columns containing ranges (e.g. "30 - 200", "2160 to 4752") and
+    generates two new columns (`col_min`, `col_max`) for each matching column,
+    dropping the original string column.
+
+    Args:
+        layer: The layer LazyFrame to process.
+
+    Returns:
+        The LazyFrame with range columns split into min/max bounds.
+    """
     # Optional word prefix like "upto ", "up to "
     WORD_PREFIX = r"(?:[A-Za-z]+\s*)+"
     # Core numeric pattern: optional word prefix, number, optional range/unit suffix
@@ -177,9 +237,15 @@ def split_cols(layer: pl.LazyFrame) -> pl.LazyFrame:
 
 
 def unnest_json_cols(layer: pl.LazyFrame) -> pl.LazyFrame:
-    """
-    Unnest columns containing JSON dicts into separate columns.
+    """Unnest columns containing JSON dicts into separate columns.
+
     E.g. dw_2019_2020 containing {"DeltaG": 10.0} becomes dw_deltag_2019_2020
+
+    Args:
+        layer: The layer LazyFrame to process.
+
+    Returns:
+        The LazyFrame with unnested JSON attributes as separate columns.
     """
     schema = layer.collect_schema()
     pattern = re.compile(r"^(.*?_)?(\d{4}(?:[-_]\d{2,4}){0,2})$")
