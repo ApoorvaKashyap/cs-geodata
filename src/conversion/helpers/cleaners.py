@@ -290,6 +290,7 @@ def unnest_json_cols(layer: pl.LazyFrame) -> pl.LazyFrame:
     for c in json_cols:
         parsed = pl.col(c).str.json_decode(dtype)
         match = pattern.match(c)
+        assert match is not None  # json_cols only contains columns that matched pattern
         prefix = match.group(1) or ""
         suffix = match.group(2)
 

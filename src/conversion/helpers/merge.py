@@ -3,8 +3,8 @@ import warnings
 import polars as pl
 import polars_st as st
 from loguru import logger
-from pyogrio.errors import DataSourceError
-from tqdm import tqdm
+from pyogrio.errors import DataSourceError  # type: ignore[import-untyped]
+from tqdm import tqdm  # type: ignore[import-untyped]
 
 from src.conversion.helpers.cleaners import clean_label, rename_and_drop
 from src.utils.configs import settings
@@ -44,11 +44,11 @@ def merge_tehsils_on_layer(
 
         try:
             df = st.read_file(file_path)
-            df = rename_and_drop(df.lazy(), cols_rename, drop_cols).collect(
-                engine="streaming"
-            )
+            df: pl.DataFrame = rename_and_drop(
+                df.lazy(), cols_rename, drop_cols
+            ).collect(engine="streaming")
             if "geometry" not in df.columns and "geom" in df.columns:
-                df = st.GeoDataFrame(df.rename({"geom": "geometry"}))
+                df = pl.DataFrame(df.rename({"geom": "geometry"}))
             if df.is_empty():
                 continue
             exprs = []
@@ -67,7 +67,7 @@ def merge_tehsils_on_layer(
                 exprs.append(val_expr.alias(col_target))
 
             if exprs:
-                df = df.with_columns(exprs)
+                df = pl.DataFrame(df.with_columns(exprs))
 
             frames.append(df.lazy())
         except DataSourceError:
@@ -175,7 +175,9 @@ def _extract_location_meta(
         "deltaG_fortnight",
         "deltaG_well_depth",
     ]
-    ordered = preferred_order + [l for l in layer_results if l not in preferred_order]
+    ordered = preferred_order + [
+        layer_key for layer_key in layer_results if layer_key not in preferred_order
+    ]
 
     for layer_name in ordered:
         if layer_name not in layer_results:
@@ -196,7 +198,8 @@ def _extract_location_meta(
             # (shouldn't happen but indicates upstream data issues)
             count = meta.collect(engine="streaming").height
             logger.info(
-                f"Location metadata: {count} unique mws_id+version pairs from '{layer_name}'"
+                f"Location metadata: {count} unique mws_id+version pairs "
+                f"from '{layer_name}'"
             )
             return meta
 

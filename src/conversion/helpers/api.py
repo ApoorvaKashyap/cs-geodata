@@ -3,13 +3,13 @@ import warnings
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-import fsspec
+import fsspec  # type: ignore[import-untyped]
 import polars as pl
-import pyarrow.parquet as pq
-import pyogrio
-import requests
+import pyarrow.parquet as pq  # type: ignore[import-untyped]
+import pyogrio  # type: ignore[import-untyped]
+import requests  # type: ignore[import-untyped]
 from loguru import logger
-from tqdm import tqdm
+from tqdm import tqdm  # type: ignore[import-untyped]
 
 from src.utils.configs import settings
 
@@ -50,7 +50,8 @@ async def get_geojson(layer: str, district: str, tehsil: str) -> int:
     """
     url = MWS_URL_MAPPING[layer].format(district=district, tehsil=tehsil)
     logger.info(
-        f"Fetching geojson for layer {layer} and district {district} and tehsil {tehsil}"
+        f"Fetching geojson for layer {layer} "
+        f"and district {district} and tehsil {tehsil} "
         f"using url {url}"
     )
     response = requests.get(url)
