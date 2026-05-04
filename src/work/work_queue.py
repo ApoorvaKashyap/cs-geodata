@@ -1,40 +1,31 @@
-from loguru import logger
-from redis.exceptions import ConnectionError as RedisConnectionError
 from rq import Queue
 
+from src.utils.configs import get_settings
 from src.utils.redis_client import get_redis_client
 
 
-def _make_queues() -> tuple[Queue, Queue, Queue, Queue]:
-    """Initialise the RQ queues, raising on connection failure.
+def get_runs_queue() -> Queue:
+    """Return the RQ queue for Descriptor orchestration jobs.
 
-    Raises:
-        RedisConnectionError: If the Redis server is unreachable.
+    Returns:
+        Queue that receives one job per Descriptor per run.
     """
-    try:
-        client = get_redis_client()
-        client.ping()  # fail fast — give a clear error instead of a silent hang
-        layers_queue = Queue("layers", connection=client)
-        id_queue = Queue("id", connection=client)
-        base_queue = Queue("base", connection=client)
-        meta_queue = Queue("meta", connection=client)
-        return layers_queue, id_queue, base_queue, meta_queue
-    except RedisConnectionError as exc:
-        logger.error("Failed to connect to Redis: %s", exc)
-        raise
+    return Queue(get_settings().rq_runs_queue, connection=get_redis_client())
 
 
-lq, iq, bq, mq = _make_queues()
+def get_fetch_queue() -> Queue:
+    """Return the RQ queue for WFS fetch jobs.
+
+    Returns:
+        Queue that receives one job per tehsil per WFS layer.
+    """
+    return Queue(get_settings().rq_fetch_queue, connection=get_redis_client())
 
 
-async def get_status(task_id: str) -> dict[str, str]:
-    task = lq.fetch_job(task_id)
-    if not task:
-        task = iq.fetch_job(task_id)
-    if not task:
-        task = bq.fetch_job(task_id)
-    if not task:
-        task = mq.fetch_job(task_id)
-    if not task:
-        return {"status": "not found"}
-    return {"status": task.get_status().value}
+def get_pipeline_queues() -> tuple[Queue, Queue]:
+    """Return the configured pipeline RQ queues.
+
+    Returns:
+        Runs queue and fetch queue.
+    """
+    return get_runs_queue(), get_fetch_queue()

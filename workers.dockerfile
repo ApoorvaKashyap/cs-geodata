@@ -16,4 +16,4 @@ RUN uv sync --locked
 
 COPY --exclude=.venv --exclude=.git --exclude=.env . /app/
 
-CMD ["uv", "run", "workers.py"]
+CMD ["uv", "run", "worker.py"]
