@@ -54,15 +54,3 @@ class RunResponse(BaseModel):
     """
 
     run_id: str
-
-
-class TaskStatusResponse(BaseModel):
-    """Response body for an RQ task status lookup.
-
-    Attributes:
-        task_id: RQ job ID.
-        status: Current job status, or ``not_found``.
-    """
-
-    task_id: str
-    status: str

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import tomllib
+from collections.abc import AsyncIterator
 from typing import TextIO, cast
 
 import fsspec
@@ -11,11 +14,11 @@ from pydantic import ValidationError
 from redis.exceptions import RedisError
 from rq.exceptions import NoSuchJobError
 from rq.job import Job
+from starlette.responses import StreamingResponse
 
 from src.api.models import (
     DescriptorValidateRequest,
     DescriptorValidateResponse,
-    TaskStatusResponse,
 )
 from src.descriptor.schema import EntityDescriptor
 from src.descriptor.validator import (
@@ -26,25 +29,53 @@ from src.stac.client import StacClient, StacClientError, StacItem
 from src.utils.redis_client import get_redis_client
 
 router = APIRouter(tags=["pipeline"])
+TASK_TERMINAL_STATUSES = {"finished", "failed", "stopped", "canceled"}
 
 
-@router.get("/tasks/{task_id}", response_model=TaskStatusResponse)
-async def get_task_status(task_id: str) -> TaskStatusResponse:
-    """Return the current status for an RQ task.
+@router.get("/tasks/{task_id}")
+async def stream_task_status(task_id: str) -> StreamingResponse:
+    """Stream RQ task status changes as server-sent events.
 
     Args:
-        task_id: RQ job ID to inspect.
+        task_id: RQ job ID to watch.
 
     Returns:
-        Task status response.
+        SSE response that emits an event whenever the job status changes.
     """
+    return StreamingResponse(
+        _task_status_events(task_id),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+async def _task_status_events(task_id: str) -> AsyncIterator[str]:
+    last_status: str | None = None
+
+    while True:
+        status = _get_task_status(task_id)
+        if status != last_status:
+            yield _sse_event("status", {"task_id": task_id, "status": status})
+            last_status = status
+
+        if status in TASK_TERMINAL_STATUSES or status.startswith("redis_error"):
+            return
+
+        await asyncio.sleep(1)
+
+
+def _get_task_status(task_id: str) -> str:
     try:
         job = Job.fetch(task_id, connection=get_redis_client())
     except NoSuchJobError:
-        return TaskStatusResponse(task_id=task_id, status="not_found")
+        return "not_found"
     except RedisError as exc:
-        return TaskStatusResponse(task_id=task_id, status=f"redis_error: {exc}")
-    return TaskStatusResponse(task_id=task_id, status=job.get_status().value)
+        return f"redis_error: {exc}"
+    return job.get_status().value
+
+
+def _sse_event(event: str, payload: dict[str, str]) -> str:
+    return f"event: {event}\ndata: {json.dumps(payload)}\n\n"
 
 
 @router.post("/descriptors/validate", response_model=DescriptorValidateResponse)
