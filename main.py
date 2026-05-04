@@ -1,3 +1,7 @@
+"""FastAPI entrypoint for the GeoData pipeline."""
+
+from __future__ import annotations
+
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -5,55 +9,64 @@ from typing import Any
 import uvicorn
 from fastapi import FastAPI
 from loguru import logger
+from redis.exceptions import RedisError
 
-from src.routers.geojson import router as geojson_router
-from src.utils.checks import check_redis_connection, check_worker_status
-from src.work.work_queue import get_status
+from src.api.routes import router as pipeline_router
+from src.utils.configs import get_settings
+from src.utils.redis_client import get_redis_client
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, Any]:
-    # Startup tasks
-    logger.add("logs/converter.logs", retention="10 days")
-    logger.info("Application Startup Completed!")
+    """Configure process-level application resources.
+
+    Args:
+        app: FastAPI application instance.
+
+    Yields:
+        Control back to FastAPI while the application is running.
+    """
+    settings = get_settings()
+    logger.remove()
+    logger.add("logs/converter.logs", retention="10 days", level=settings.log_level)
+    logger.add(lambda message: print(message, end=""), level=settings.log_level)
+    logger.info("Application startup completed.")
     yield
-    # Shutdown tasks
+    logger.info("Application shutdown completed.")
 
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    title="GeoData Pipeline",
+    version="0.1.0",
+    lifespan=lifespan,
+)
 
 
-@app.get(path="/")
-async def read_root() -> dict[str, str]:
-    if not check_redis_connection():
-        return {
-            "status": "error",
-            "message": "Redis connection or worker status check failed",
-        }
-    workers = check_worker_status()
-    if len(workers["id"]) == 0:
-        return {
-            "status": "error",
-            "message": "No ID workers running",
-        }
-    if len(workers["layers"]) == 0:
-        return {
-            "status": "error",
-            "message": "No layers workers running",
-        }
-    return {
-        "status": "ok",
-        "message": f"All systems connected! "
-        f"ID workers: {len(workers['id'])} Layer workers: {len(workers['layers'])}",
-    }
+@app.get("/")
+async def health() -> dict[str, str]:
+    """Return basic API health.
+
+    Returns:
+        Health status payload.
+    """
+    return {"status": "ok"}
 
 
-@app.get(path="/api/v1/status")
-async def get_jobstatus(task_id: str) -> dict[str, str]:
-    return await get_status(task_id)
+@app.get("/health/ready")
+async def readiness() -> dict[str, str]:
+    """Return dependency readiness for accepting pipeline work.
+
+    Returns:
+        Readiness payload with Redis status.
+    """
+    try:
+        get_redis_client().ping()
+    except RedisError as exc:
+        return {"status": "error", "redis": str(exc)}
+    return {"status": "ok", "redis": "ok"}
 
 
-app.include_router(geojson_router, prefix="/api/v1")
+app.include_router(pipeline_router)
 
 
 if __name__ == "__main__":
