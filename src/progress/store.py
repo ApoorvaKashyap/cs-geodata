@@ -210,6 +210,17 @@ class ProgressStore:
             descriptors=descriptors,
         )
 
+    def has_run(self, run_id: UUID | str) -> bool:
+        """Return whether a run progress index exists.
+
+        Args:
+            run_id: UUID assigned to the run.
+
+        Returns:
+            True when Redis contains progress for the run.
+        """
+        return bool(self.redis.exists(self._run_key(run_id)))
+
     def get_descriptor(
         self,
         run_id: UUID | str,
