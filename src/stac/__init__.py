@@ -7,6 +7,7 @@ from src.stac.client import (
     StacSourceInfo,
     extract_asset_href,
     extract_proj_code,
+    extract_table_column_types,
     extract_table_columns,
     infer_source_type,
 )
@@ -18,6 +19,7 @@ __all__ = [
     "StacSourceInfo",
     "extract_asset_href",
     "extract_proj_code",
+    "extract_table_column_types",
     "extract_table_columns",
     "infer_source_type",
 ]

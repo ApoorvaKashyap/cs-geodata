@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -26,6 +27,7 @@ class StacSourceInfo:
     Attributes:
         stac_item_uri: URI used to fetch the STAC item.
         columns: Source table column names from ``table:columns``.
+        column_types: Source table column types keyed by column name.
         crs: CRS code from ``proj:code``.
         asset_href: Source asset URI or URL.
         source_type: Source type inferred from ``asset_href``.
@@ -33,6 +35,7 @@ class StacSourceInfo:
 
     stac_item_uri: str
     columns: set[str]
+    column_types: dict[str, str | None]
     crs: str | None
     asset_href: str
     source_type: SourceType
@@ -48,8 +51,11 @@ class StacClient:
             timeout_seconds: HTTP timeout in seconds. Defaults to configured
                 ``STAC_REQUEST_TIMEOUT_SECONDS``.
         """
-        settings = get_settings()
-        self.timeout_seconds = timeout_seconds or settings.stac_request_timeout_seconds
+        self.timeout_seconds = (
+            timeout_seconds
+            if timeout_seconds is not None
+            else get_settings().stac_request_timeout_seconds
+        )
 
     async def fetch_item(self, uri: str) -> StacItem:
         """Fetch one STAC item JSON document.
@@ -87,11 +93,25 @@ class StacClient:
             Mapping from URI to parsed STAC item JSON.
         """
         unique_uris = dict.fromkeys(uris)
-        items: dict[str, StacItem] = {}
         async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-            for uri in unique_uris:
-                items[uri] = await self._fetch_item_with_client(client, uri)
-        return items
+            results = await asyncio.gather(
+                *[self._fetch_item_with_client(client, uri) for uri in unique_uris]
+            )
+        return dict(zip(unique_uris, results, strict=True))
+
+    async def fetch_source_infos(
+        self, uris: Iterable[str]
+    ) -> dict[str, StacSourceInfo]:
+        """Fetch STAC items and resolve source metadata for each URI.
+
+        Args:
+            uris: STAC item URIs to fetch.
+
+        Returns:
+            Mapping from URI to resolved source metadata.
+        """
+        items = await self.fetch_items(uris)
+        return {uri: self.resolve_source_info(uri, item) for uri, item in items.items()}
 
     def resolve_source_info(self, uri: str, item: StacItem) -> StacSourceInfo:
         """Resolve schema, CRS, and asset source metadata from a STAC item.
@@ -113,6 +133,7 @@ class StacClient:
         return StacSourceInfo(
             stac_item_uri=uri,
             columns=extract_table_columns(item),
+            column_types=extract_table_column_types(item),
             crs=extract_proj_code(item),
             asset_href=asset_href,
             source_type=infer_source_type(asset_href),
@@ -144,12 +165,7 @@ def extract_table_columns(item: Mapping[str, Any]) -> set[str]:
     Returns:
         Column names declared under ``table:columns``.
     """
-    columns = item.get("table:columns")
-    if columns is None:
-        properties = item.get("properties")
-        if isinstance(properties, Mapping):
-            columns = properties.get("table:columns")
-
+    columns = _get_table_columns(item)
     if not isinstance(columns, list):
         return set()
 
@@ -162,6 +178,32 @@ def extract_table_columns(item: Mapping[str, Any]) -> set[str]:
         elif isinstance(column, str):
             names.add(column)
     return names
+
+
+def extract_table_column_types(item: Mapping[str, Any]) -> dict[str, str | None]:
+    """Extract source column types from a STAC item.
+
+    Args:
+        item: Parsed STAC item JSON.
+
+    Returns:
+        Column type values keyed by column name.
+    """
+    columns = _get_table_columns(item)
+    if not isinstance(columns, list):
+        return {}
+
+    types: dict[str, str | None] = {}
+    for column in columns:
+        if not isinstance(column, Mapping):
+            continue
+        name = column.get("name")
+        if not isinstance(name, str):
+            continue
+
+        column_type = column.get("type")
+        types[name] = column_type if isinstance(column_type, str) else None
+    return types
 
 
 def extract_proj_code(item: Mapping[str, Any]) -> str | None:
@@ -194,6 +236,8 @@ def extract_asset_href(item: Mapping[str, Any]) -> str | None:
     if not isinstance(assets, Mapping):
         return None
 
+    preferred_asset_keys = ("data", "source", "asset")
+
     for asset in assets.values():
         if not isinstance(asset, Mapping):
             continue
@@ -201,6 +245,11 @@ def extract_asset_href(item: Mapping[str, Any]) -> str | None:
         href = asset.get("href")
         if isinstance(href, str) and isinstance(roles, list) and "data" in roles:
             return href
+
+    for asset_key in preferred_asset_keys:
+        asset = assets.get(asset_key)
+        if isinstance(asset, Mapping) and isinstance(asset.get("href"), str):
+            return asset["href"]
 
     for asset in assets.values():
         if isinstance(asset, Mapping) and isinstance(asset.get("href"), str):
@@ -229,3 +278,12 @@ def infer_source_type(asset_href: str) -> SourceType:
     ):
         return "wfs"
     raise StacClientError(f"Unsupported STAC asset href source type: {asset_href}")
+
+
+def _get_table_columns(item: Mapping[str, Any]) -> object:
+    columns = item.get("table:columns")
+    if columns is None:
+        properties = item.get("properties")
+        if isinstance(properties, Mapping):
+            columns = properties.get("table:columns")
+    return columns
