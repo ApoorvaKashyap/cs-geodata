@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tomllib
 from typing import TextIO, cast
+from uuid import uuid4
 
 import fsspec
 from fastapi import APIRouter, HTTPException
@@ -13,16 +14,69 @@ from redis.exceptions import RedisError
 from src.api.models import (
     DescriptorValidateRequest,
     DescriptorValidateResponse,
+    RunRequest,
+    RunResponse,
 )
 from src.descriptor.schema import EntityDescriptor
 from src.descriptor.validator import (
     DescriptorValidationError,
     validate_descriptor,
+    validate_unique_entities,
 )
+from src.pipeline.orchestrator import run_descriptor_job
 from src.progress.store import ProgressStore, RunProgress
 from src.stac.client import StacClient, StacClientError, StacItem
+from src.utils.configs import get_settings
+from src.work.work_queue import get_runs_queue
 
 router = APIRouter(tags=["pipeline"])
+
+
+@router.post("/runs", response_model=RunResponse)
+async def create_run(request: RunRequest) -> RunResponse:
+    """Validate Descriptors and enqueue a pipeline run.
+
+    Args:
+        request: Run creation request.
+
+    Returns:
+        Run ID for progress polling.
+
+    Raises:
+        HTTPException: If validation fails or Redis/RQ is unavailable.
+    """
+    descriptors, errors = await _read_and_validate_descriptors(request.descriptors)
+    errors.extend(validate_unique_entities(descriptors, request.descriptors))
+    if errors:
+        raise HTTPException(
+            status_code=422,
+            detail=[error.model_dump(exclude_none=True) for error in errors],
+        )
+
+    run_id = str(uuid4())
+    settings = get_settings()
+
+    try:
+        ProgressStore().initialise_run(
+            run_id,
+            [descriptor.entity for descriptor in descriptors],
+        )
+        queue = get_runs_queue()
+        for descriptor in descriptors:
+            queue.enqueue(
+                run_descriptor_job,
+                run_id,
+                descriptor.model_dump(mode="json"),
+                request.output_root,
+                job_timeout=settings.rq_job_timeout,
+            )
+    except RedisError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Redis or RQ unavailable: {exc}",
+        ) from exc
+
+    return RunResponse(run_id=run_id)
 
 
 @router.get("/runs/{run_id}", response_model=RunProgress)
@@ -85,6 +139,31 @@ async def validate_descriptor_endpoint(
         descriptor=descriptor,
         errors=errors,
     )
+
+
+async def _read_and_validate_descriptors(
+    descriptor_uris: list[str],
+) -> tuple[list[EntityDescriptor], list[DescriptorValidationError]]:
+    descriptors: list[EntityDescriptor] = []
+    errors: list[DescriptorValidationError] = []
+
+    for descriptor_uri in descriptor_uris:
+        descriptor, parse_errors = _read_descriptor(descriptor_uri)
+        if descriptor is None:
+            errors.extend(parse_errors)
+            continue
+
+        stac_items, stac_errors = await _fetch_stac_items(descriptor, descriptor_uri)
+        validation_result = validate_descriptor(
+            descriptor=descriptor,
+            stac_items=stac_items,
+            descriptor_uri=descriptor_uri,
+        )
+        descriptors.append(descriptor)
+        errors.extend(stac_errors)
+        errors.extend(validation_result.errors)
+
+    return descriptors, errors
 
 
 def _read_descriptor(
