@@ -8,11 +8,17 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
+import httpx
 import polars as pl
 import pytest
 
 from src.sources.s3 import S3Source, _geojson_to_lazyframe, _read_file
-from src.sources.wfs import TehsilKey, _child_links, _derive_catalogue_root
+from src.sources.wfs import (
+    TehsilKey,
+    _child_links,
+    _derive_catalogue_root,
+    walk_stac_tehsil_hierarchy,
+)
 
 # ---------------------------------------------------------------------------
 # S3Source helpers
@@ -147,6 +153,50 @@ def test_derive_catalogue_root_fallback() -> None:
     assert root.endswith("/")
 
 
+def test_walk_stac_tehsil_hierarchy_throttles_catalogue_fetches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    active = 0
+    max_active = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        await asyncio.sleep(0.01)
+        active -= 1
+
+        url = str(request.url)
+        if url == "https://stac.example.com/tehsil_wise/":
+            return _stac_response(["state_a", "state_b", "state_c"])
+        if (
+            url.endswith("/state_a/")
+            or url.endswith("/state_b/")
+            or url.endswith("/state_c/")
+        ):
+            return _stac_response(["district_1", "district_2"])
+        return _stac_response(["tehsil_1", "tehsil_2"])
+
+    transport = httpx.MockTransport(handler)
+    original_async_client = httpx.AsyncClient
+
+    def async_client_factory(*args: object, **kwargs: object) -> httpx.AsyncClient:
+        kwargs["transport"] = transport
+        return original_async_client(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", async_client_factory)
+
+    keys = asyncio.run(
+        walk_stac_tehsil_hierarchy(
+            "https://stac.example.com/tehsil_wise/state_a/district_1/tehsil_1/item.json",
+            max_concurrent_fetches=2,
+        )
+    )
+
+    assert len(keys) == 12
+    assert max_active <= 2
+
+
 # ---------------------------------------------------------------------------
 # Per-tehsil fetch job
 # ---------------------------------------------------------------------------
@@ -162,6 +212,18 @@ def _make_httpx_handler(status_code: int, json_body: object = None):
         return httpx.Response(status_code)
 
     return handler
+
+
+def _stac_response(children: list[str]) -> httpx.Response:
+    return httpx.Response(
+        200,
+        json={
+            "links": [
+                {"rel": "child", "href": f"https://stac.example.com/{child}/"}
+                for child in children
+            ]
+        },
+    )
 
 
 def test_fetch_tehsil_job_writes_parquet(tmp_path: Path) -> None:
