@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import asyncio
 
-from src.descriptor.schema import EntityDescriptor
+import polars as pl
+
+from src.descriptor.schema import EntityDescriptor, LayerResolution
 from src.pipeline.fetch import fetch_layer
+from src.pipeline.merge import merge_resolution_frames
 from src.pipeline.normalise import normalise
 from src.pipeline.reshape import reshape
-from src.pipeline.write import write_layer
+from src.pipeline.write import write_resolution
 from src.progress.store import ProgressStore
 from src.stac.client import StacSourceInfo
 from src.utils.workspace import run_workspace
@@ -79,6 +82,7 @@ async def _run_pipeline_stages(
     from pathlib import Path
 
     scratch = Path(workspace_path)
+    outputs: dict[LayerResolution, list[tuple[pl.LazyFrame, StacSourceInfo]]] = {}
 
     for layer in descriptor.layers:
         source_info = source_infos.get(layer.stac_item)
@@ -114,14 +118,32 @@ async def _run_pipeline_stages(
             layer=layer.name,
         )
         frame = reshape(frame, layer, descriptor.key)
+        outputs.setdefault(layer.resolution, []).append((frame, source_info))
+
+    for resolution, items in outputs.items():
+        progress.mark_descriptor_running(
+            run_id,
+            descriptor.entity,
+            phase="merge",
+        )
+        merged = merge_resolution_frames(
+            [frame for frame, _ in items],
+            resolution,
+            descriptor.key,
+        )
 
         progress.mark_descriptor_running(
             run_id,
             descriptor.entity,
             phase="write",
-            layer=layer.name,
         )
-        write_layer(frame, layer, descriptor, source_info, output_root)
+        write_resolution(
+            merged,
+            resolution,
+            descriptor,
+            items[0][1],
+            output_root,
+        )
 
 
 def _deserialize_source_info(

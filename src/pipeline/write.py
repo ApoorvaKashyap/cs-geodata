@@ -9,7 +9,7 @@ import polars as pl
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from src.descriptor.schema import EntityDescriptor, LayerDescriptor
+from src.descriptor.schema import EntityDescriptor, LayerDescriptor, LayerResolution
 from src.stac.client import StacSourceInfo
 from src.utils.duckdb import duckdb_connection
 
@@ -42,18 +42,42 @@ def write_layer(
         source_info: Resolved STAC source metadata (CRS, etc.).
         output_root: Root path or URI for ecolib output data.
     """
+    write_resolution(
+        frame,
+        layer.resolution,
+        descriptor,
+        source_info,
+        output_root,
+    )
+
+
+def write_resolution(
+    frame: pl.LazyFrame,
+    resolution: LayerResolution,
+    descriptor: EntityDescriptor,
+    source_info: StacSourceInfo,
+    output_root: str,
+) -> None:
+    """Write one merged output frame for an entity resolution.
+
+    Args:
+        frame: Merged LazyFrame ready for output.
+        resolution: Output resolution to write.
+        descriptor: Entity Descriptor carrying entity name and partition column.
+        source_info: Resolved STAC source metadata used for CRS.
+        output_root: Root path or URI for ecolib output data.
+    """
     entity_dir = Path(output_root) / descriptor.entity
     entity_dir.mkdir(parents=True, exist_ok=True)
 
-    if layer.resolution == "static":
-        _write_geoparquet(frame, layer, descriptor, source_info, entity_dir)
+    if resolution == "static":
+        _write_geoparquet(frame, descriptor, source_info, entity_dir)
     else:
-        _write_temporal_parquet(frame, layer, entity_dir)
+        _write_temporal_parquet(frame, resolution, entity_dir)
 
 
 def _write_geoparquet(
     frame: pl.LazyFrame,
-    layer: LayerDescriptor,
     descriptor: EntityDescriptor,
     source_info: StacSourceInfo,
     entity_dir: Path,
@@ -91,10 +115,10 @@ def _write_geoparquet(
 
 def _write_temporal_parquet(
     frame: pl.LazyFrame,
-    layer: LayerDescriptor,
+    resolution: LayerResolution,
     entity_dir: Path,
 ) -> None:
-    filename = f"{layer.resolution}.parquet"
+    filename = f"{resolution}.parquet"
     output_path = entity_dir / filename
     frame.sink_parquet(output_path, compression="snappy")
 
