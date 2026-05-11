@@ -249,6 +249,38 @@ def temporal_pattern_to_regex(pattern: str) -> re.Pattern[str]:
     return re.compile("".join(regex_parts))
 
 
+def temporal_pattern_to_col_regex(pattern: str) -> re.Pattern[str]:
+    """Convert a Descriptor temporal pattern into a regex that captures the column base name.
+
+    Similar to :func:`temporal_pattern_to_regex` but wraps the ``{col}`` token
+    in a capture group so callers can extract the base column name from a match
+    via ``match.group(1)``.
+
+    Args:
+        pattern: Descriptor temporal pattern such as ``{col}_{YYYY}_{YYYY}``.
+
+    Returns:
+        Regex that captures the column base name in group 1 when ``{col}`` is
+        present, or matches the full column name otherwise.
+    """
+    token_patterns = {
+        "col": r"([A-Za-z_][A-Za-z0-9_]*)",
+        "YYYY": r"\d{4}",
+        "NNN": r"\d{1,3}",
+    }
+    regex_parts: list[str] = []
+    cursor = 0
+
+    for match in re.finditer(r"\{(col|YYYY|NNN)\}", pattern):
+        regex_parts.append(re.escape(pattern[cursor : match.start()]))
+        token = match.group(1)
+        regex_parts.append(token_patterns[token])
+        cursor = match.end()
+
+    regex_parts.append(re.escape(pattern[cursor:]))
+    return re.compile("".join(regex_parts))
+
+
 def _output_columns_after_normalise(
     layer: LayerDescriptor,
     source_columns: set[str],

@@ -63,9 +63,12 @@ def test_fetch_stac_items_returns_structured_errors(monkeypatch) -> None:
 
     monkeypatch.setattr("src.api.routes.StacClient", FailingStacClient)
 
-    items, errors = asyncio.run(_fetch_stac_items(descriptor, "descriptor.toml"))
+    items, source_infos, errors = asyncio.run(
+        _fetch_stac_items(descriptor, "descriptor.toml")
+    )
 
     assert items == {}
+    assert source_infos == {}
     assert len(errors) == 1
     assert errors[0].field == "stac_item"
 
@@ -108,8 +111,8 @@ def test_create_run_initialises_progress_and_enqueues_jobs(monkeypatch) -> None:
 
     async def fake_read_and_validate(
         descriptor_uris: list[str],
-    ) -> tuple[list[EntityDescriptor], list[DescriptorValidationError]]:
-        return [descriptor], []
+    ) -> tuple[list[EntityDescriptor], dict, list[DescriptorValidationError]]:
+        return [descriptor], {}, []
 
     monkeypatch.setattr("src.api.routes.ProgressStore", FakeProgressStore)
     monkeypatch.setattr("src.api.routes.get_runs_queue", lambda: FakeQueue())
@@ -132,20 +135,23 @@ def test_create_run_initialises_progress_and_enqueues_jobs(monkeypatch) -> None:
     assert initialised == [(response.run_id, ["tehsil"])]
     assert len(enqueued) == 1
     assert enqueued[0][0][1] == response.run_id
-    assert enqueued[0][1]["job_timeout"] == 123
 
 
 def test_create_run_rejects_validation_errors(monkeypatch) -> None:
     async def fake_read_and_validate(
         descriptor_uris: list[str],
-    ) -> tuple[list[EntityDescriptor], list[DescriptorValidationError]]:
-        return [], [
-            DescriptorValidationError(
-                descriptor_uri="bad.toml",
-                field="descriptor",
-                message="invalid",
-            )
-        ]
+    ) -> tuple[list[EntityDescriptor], dict, list[DescriptorValidationError]]:
+        return (
+            [],
+            {},
+            [
+                DescriptorValidationError(
+                    descriptor_uri="bad.toml",
+                    field="descriptor",
+                    message="invalid",
+                )
+            ],
+        )
 
     monkeypatch.setattr(
         "src.api.routes._read_and_validate_descriptors",

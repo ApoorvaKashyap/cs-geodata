@@ -17,7 +17,12 @@ class LayerDescriptor(BaseModel):
     Attributes:
         name: Logical layer name used in progress reporting.
         resolution: Output resolution produced from this layer.
-        stac_item: URI for the live STAC item JSON.
+        stac_item: URI for the live STAC item JSON. For WFS layers this is also
+            the root from which the tehsil iteration list is derived by walking
+            the ``tehsil_wise/{state}/{district}/{tehsil}/`` hierarchy.
+        url_template: WFS URL template with ``{state}``, ``{district}``, and
+            ``{tehsil}`` placeholders. Required when the STAC asset href is a
+            WFS endpoint; unused for S3 sources.
         rename: Source-to-output column rename declarations.
         drop: Source columns to remove during normalisation.
         temporal_pattern: Pattern used to reshape wide temporal columns.
@@ -28,6 +33,7 @@ class LayerDescriptor(BaseModel):
     name: str
     resolution: LayerResolution
     stac_item: str
+    url_template: str | None = None
     rename: dict[str, str] = Field(default_factory=dict)
     drop: list[str] = Field(default_factory=list)
     temporal_pattern: str | None = None
