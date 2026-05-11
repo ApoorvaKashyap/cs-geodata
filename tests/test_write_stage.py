@@ -6,9 +6,13 @@ from pathlib import Path
 
 import fsspec
 import polars as pl
+import pyarrow as pa
+import shapely.wkb
+from shapely.geometry import Point
 
 from src.descriptor.schema import EntityDescriptor
 from src.pipeline.write import (
+    _compute_bbox,
     _is_s3_uri,
     _join_uri,
     _upload_entity_output,
@@ -109,3 +113,23 @@ def test_write_resolution_s3_writes_locally_then_uploads(monkeypatch) -> None:
 
     assert len(uploads) == 1
     assert uploads[0][1] == "s3://bucket/ecolib/mws"
+
+
+def test_compute_bbox_from_wkb_geometry() -> None:
+    table = pa.table(
+        {
+            "geometry": [
+                shapely.wkb.dumps(Point(1, 2)),
+                shapely.wkb.dumps(Point(3, 4)),
+                None,
+            ]
+        }
+    )
+
+    assert _compute_bbox(table, "geometry") == (1.0, 2.0, 3.0, 4.0)
+
+
+def test_compute_bbox_ignores_invalid_wkb() -> None:
+    table = pa.table({"geometry": [b"not-wkb"]})
+
+    assert _compute_bbox(table, "geometry") is None

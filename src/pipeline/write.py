@@ -10,6 +10,8 @@ import fsspec
 import polars as pl
 import pyarrow as pa
 import pyarrow.parquet as pq
+import shapely
+import shapely.wkb
 
 from src.descriptor.schema import EntityDescriptor, LayerDescriptor, LayerResolution
 from src.stac.client import StacSourceInfo
@@ -239,21 +241,20 @@ def _compute_bbox(
     if geometry_col not in table.schema.names:
         return None
 
-    try:
-        import shapely
-        import shapely.wkb
+    geoms = []
+    for cell in table.column(geometry_col):
+        if not cell.is_valid or cell.as_py() is None:
+            continue
+        try:
+            geoms.append(shapely.wkb.loads(bytes(cell.as_py())))
+        except (TypeError, ValueError, shapely.errors.GEOSException):
+            continue
 
-        geoms = [
-            shapely.wkb.loads(bytes(cell.as_py()))
-            for cell in table.column(geometry_col)
-            if cell.is_valid and cell.as_py() is not None
-        ]
-        if not geoms:
-            return None
-        bounds = shapely.unary_union(geoms).bounds
-        return (bounds[0], bounds[1], bounds[2], bounds[3])
-    except Exception:
+    if not geoms:
         return None
+
+    bounds = shapely.union_all(geoms).bounds
+    return (bounds[0], bounds[1], bounds[2], bounds[3])
 
 
 def _write_global_metadata(
