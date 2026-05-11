@@ -97,16 +97,11 @@ async def _fetch_wfs(
         )
         jobs.append((job, output_path))
 
-    _wait_for_jobs(jobs, redis)
-
-    failed = [
-        job
-        for job, _ in jobs
-        if Job.fetch(job.id, connection=redis).get_status() == JobStatus.FAILED
-    ]
-    if failed:
+    failed_job_ids = _wait_for_jobs(jobs, redis)
+    if failed_job_ids:
         raise RuntimeError(
-            f"Layer '{layer.name}': {len(failed)} of {len(jobs)} tehsil fetch jobs failed."
+            f"Layer '{layer.name}': {len(failed_job_ids)} of {len(jobs)} "
+            "tehsil fetch jobs failed."
         )
 
     frames = [
@@ -123,12 +118,23 @@ async def _fetch_wfs(
 def _wait_for_jobs(
     jobs: list[tuple[Job, Path]],
     redis: object,
-) -> None:
-    job_ids = [job.id for job, _ in jobs]
-    while True:
-        statuses = {
-            jid: Job.fetch(jid, connection=redis).get_status() for jid in job_ids
-        }
-        if all(status in _TERMINAL_STATUSES for status in statuses.values()):
-            break
-        time.sleep(_POLL_INTERVAL_SECONDS)
+) -> set[str]:
+    pending = {job.id for job, _ in jobs}
+    failed: set[str] = set()
+
+    while pending:
+        completed: set[str] = set()
+        for job_id in pending:
+            status = Job.fetch(job_id, connection=redis).get_status()
+            if status not in _TERMINAL_STATUSES:
+                continue
+
+            completed.add(job_id)
+            if status == JobStatus.FAILED:
+                failed.add(job_id)
+
+        pending -= completed
+        if pending:
+            time.sleep(_POLL_INTERVAL_SECONDS)
+
+    return failed
