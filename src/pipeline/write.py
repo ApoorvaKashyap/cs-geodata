@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
+import fsspec
 import polars as pl
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -12,6 +14,7 @@ import pyarrow.parquet as pq
 from src.descriptor.schema import EntityDescriptor, LayerDescriptor, LayerResolution
 from src.stac.client import StacSourceInfo
 from src.utils.duckdb import duckdb_connection
+from src.utils.s3 import get_s3_storage_options
 
 
 def write_layer(
@@ -67,6 +70,34 @@ def write_resolution(
         source_info: Resolved STAC source metadata used for CRS.
         output_root: Root path or URI for ecolib output data.
     """
+    if _is_s3_uri(output_root):
+        with TemporaryDirectory() as tmpdir:
+            local_root = Path(tmpdir)
+            _write_resolution_local(
+                frame,
+                resolution,
+                descriptor,
+                source_info,
+                local_root,
+            )
+            _upload_entity_output(
+                local_root / descriptor.entity,
+                _join_uri(output_root, descriptor.entity),
+            )
+        return
+
+    _write_resolution_local(
+        frame, resolution, descriptor, source_info, Path(output_root)
+    )
+
+
+def _write_resolution_local(
+    frame: pl.LazyFrame,
+    resolution: LayerResolution,
+    descriptor: EntityDescriptor,
+    source_info: StacSourceInfo,
+    output_root: Path,
+) -> None:
     entity_dir = Path(output_root) / descriptor.entity
     entity_dir.mkdir(parents=True, exist_ok=True)
 
@@ -74,6 +105,31 @@ def write_resolution(
         _write_geoparquet(frame, descriptor, source_info, entity_dir)
     else:
         _write_temporal_parquet(frame, resolution, entity_dir)
+
+
+def _upload_entity_output(local_entity_dir: Path, remote_entity_uri: str) -> None:
+    storage_options = get_s3_storage_options()
+    fs, remote_path = fsspec.core.url_to_fs(remote_entity_uri, **storage_options)
+    fs.makedirs(remote_path, exist_ok=True)
+
+    for local_file in local_entity_dir.rglob("*"):
+        if not local_file.is_file():
+            continue
+
+        relative_path = local_file.relative_to(local_entity_dir).as_posix()
+        remote_file = f"{remote_path.rstrip('/')}/{relative_path}"
+        parent = remote_file.rsplit("/", 1)[0]
+        fs.makedirs(parent, exist_ok=True)
+        with local_file.open("rb") as src, fs.open(remote_file, "wb") as dst:
+            dst.write(src.read())
+
+
+def _is_s3_uri(uri: str) -> bool:
+    return uri.startswith("s3://")
+
+
+def _join_uri(root: str, *parts: str) -> str:
+    return "/".join([root.rstrip("/"), *[part.strip("/") for part in parts]])
 
 
 def _write_geoparquet(
