@@ -61,7 +61,7 @@ class StacClient:
         """Fetch one STAC item JSON document.
 
         Args:
-            uri: HTTP or HTTPS URI for a STAC item JSON document.
+            uri: HTTP/HTTPS or S3 URI for a STAC item JSON document.
 
         Returns:
             Parsed STAC item JSON.
@@ -69,6 +69,11 @@ class StacClient:
         Raises:
             StacClientError: If the item cannot be fetched or is not JSON.
         """
+        if uri.startswith("s3://"):
+            return await self._fetch_s3_item(uri)
+        return await self._fetch_http_item(uri)
+
+    async def _fetch_http_item(self, uri: str) -> StacItem:
         try:
             async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
                 response = await client.get(uri)
@@ -83,6 +88,26 @@ class StacClient:
             raise StacClientError(f"STAC item '{uri}' JSON must be an object.")
         return item
 
+    async def _fetch_s3_item(self, uri: str) -> StacItem:
+        import json
+
+        import fsspec
+
+        from src.utils.s3 import get_s3_storage_options
+
+        try:
+            storage_options = get_s3_storage_options()
+            with fsspec.open(uri, mode="rt", encoding="utf-8", **storage_options) as f:
+                item = json.loads(f.read())
+        except Exception as exc:
+            raise StacClientError(
+                f"Failed to fetch S3 STAC item '{uri}': {exc}"
+            ) from exc
+
+        if not isinstance(item, dict):
+            raise StacClientError(f"STAC item '{uri}' JSON must be an object.")
+        return item
+
     async def fetch_items(self, uris: Iterable[str]) -> dict[str, StacItem]:
         """Fetch multiple STAC item JSON documents.
 
@@ -92,12 +117,28 @@ class StacClient:
         Returns:
             Mapping from URI to parsed STAC item JSON.
         """
-        unique_uris = dict.fromkeys(uris)
-        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-            results = await asyncio.gather(
-                *[self._fetch_item_with_client(client, uri) for uri in unique_uris]
+        unique_uris = list(dict.fromkeys(uris))
+        s3_uris = [u for u in unique_uris if u.startswith("s3://")]
+        http_uris = [u for u in unique_uris if not u.startswith("s3://")]
+
+        results: dict[str, StacItem] = {}
+
+        # Fetch S3 items in parallel
+        if s3_uris:
+            s3_results = await asyncio.gather(
+                *[self._fetch_s3_item(u) for u in s3_uris]
             )
-        return dict(zip(unique_uris, results, strict=True))
+            results.update(zip(s3_uris, s3_results, strict=True))
+
+        # Fetch HTTP items using a shared client
+        if http_uris:
+            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+                http_results = await asyncio.gather(
+                    *[self._fetch_item_with_client(client, u) for u in http_uris]
+                )
+                results.update(zip(http_uris, http_results, strict=True))
+
+        return results
 
     async def fetch_source_infos(
         self, uris: Iterable[str]

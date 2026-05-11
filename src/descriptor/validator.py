@@ -234,12 +234,12 @@ def temporal_pattern_to_regex(pattern: str) -> re.Pattern[str]:
     token_patterns = {
         "col": r"[A-Za-z_][A-Za-z0-9_]*",
         "YYYY": r"\d{4}",
-        "NNN": r"\d{1,3}",
+        "DATE": r"\d{4}-\d{2}-\d{2}",
     }
     regex_parts: list[str] = []
     cursor = 0
 
-    for match in re.finditer(r"\{(col|YYYY|NNN)\}", pattern):
+    for match in re.finditer(r"\{(col|YYYY|DATE)\}", pattern):
         regex_parts.append(re.escape(pattern[cursor : match.start()]))
         token = match.group(1)
         regex_parts.append(token_patterns[token])
@@ -266,12 +266,12 @@ def temporal_pattern_to_col_regex(pattern: str) -> re.Pattern[str]:
     token_patterns = {
         "col": r"([A-Za-z_][A-Za-z0-9_]*)",
         "YYYY": r"\d{4}",
-        "NNN": r"\d{1,3}",
+        "DATE": r"\d{4}-\d{2}-\d{2}",
     }
     regex_parts: list[str] = []
     cursor = 0
 
-    for match in re.finditer(r"\{(col|YYYY|NNN)\}", pattern):
+    for match in re.finditer(r"\{(col|YYYY|DATE)\}", pattern):
         regex_parts.append(re.escape(pattern[cursor : match.start()]))
         token = match.group(1)
         regex_parts.append(token_patterns[token])

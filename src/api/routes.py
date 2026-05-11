@@ -131,7 +131,7 @@ async def validate_descriptor_endpoint(
             errors=parse_errors,
         )
 
-    stac_items, stac_errors = await _fetch_stac_items(
+    stac_items, _, stac_errors = await _fetch_stac_items(
         descriptor, request.descriptor_uri
     )
     result = validate_descriptor(
@@ -183,8 +183,16 @@ async def _read_and_validate_descriptors(
 def _read_descriptor(
     descriptor_uri: str,
 ) -> tuple[EntityDescriptor | None, list[DescriptorValidationError]]:
+    from src.utils.s3 import get_s3_storage_options
+
+    storage_options = {}
+    if descriptor_uri.startswith("s3://"):
+        storage_options = get_s3_storage_options()
+
     try:
-        with fsspec.open(descriptor_uri, mode="rt", encoding="utf-8") as file:
+        with fsspec.open(
+            descriptor_uri, mode="rt", encoding="utf-8", **storage_options
+        ) as file:
             content = cast(TextIO, file).read()
         return EntityDescriptor.from_toml(content), []
     except FileNotFoundError:

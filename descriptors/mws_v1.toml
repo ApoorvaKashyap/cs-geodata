@@ -1,0 +1,170 @@
+# Descriptor for the MWS (Micro-Watershed) entity dataset.
+#
+# Sources:
+#   Static layers (base geometry) — CoreStack S3, Pan India Parquet file
+#   Attribute layers (terrain, aquifer, soge) — CoreStack GeoServer WFS, tehsil-partitioned
+#   Temporal layers — CoreStack GeoServer WFS, tehsil-partitioned
+#
+# Outputs:
+#   mws/static.geoparquet      (partitioned by river_basin)
+#   mws/annual.parquet
+#   mws/fortnightly.parquet
+#
+# Key: mws_id  (source column: uid)
+# Partition: river_basin
+#
+# NOTE: For WFS layers, the stac_item should point to a STAC item that describes
+# the layer schema and provides a template or collection-level metadata. The actual
+# tehsil-wise URLs will be constructed by the pipeline at runtime based on the
+# active tehsil list from the STAC catalogue hierarchy.
+
+entity       = "mws"
+key          = "mws_id"
+geometry     = "geometry"
+partition_by = "river_basin"
+
+# ---------------------------------------------------------------------------
+# Layer 1 — Base geometry (static)
+# MWS boundaries v2 from Pan India S3 parquet.
+# This is the S3Source - downloaded as a single file.
+# ---------------------------------------------------------------------------
+
+[[layers]]
+name       = "mws_base"
+resolution = "static"
+stac_item  = "file:///home/claude/stac_crawled/CorestackCatalogs_merged_collection/PanIndiaCatalogs/hydrological_boundaries/microwatershed_boundaries_v2_vector/microwatershed_boundaries_v2_vector.json"
+
+drop = ["area_in_ha", "id"]
+
+[layers.rename]
+uid = "mws_id"
+
+# ---------------------------------------------------------------------------
+# Layer 2 — terrain (static)
+# Terrain cluster and valley area attributes per MWS.
+# Source: GeoServer WFS, tehsil-partitioned (WFSSource).
+# URL pattern: https://geoserver.core-stack.org:8443/geoserver/terrain/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=terrain%3A{district}_{tehsil}_cluster&outputFormat=application%2Fjson
+# ---------------------------------------------------------------------------
+
+[[layers]]
+name       = "terrain"
+resolution = "static"
+# PLACEHOLDER: This stac_item URL needs to exist in the live STAC catalogue
+# It should describe the schema of the terrain_cluster layer
+stac_item  = "https://geoserver.core-stack.org:8443/geoserver/stac/collections/terrain/items/terrain_cluster"
+
+drop = ["area_in_ha"]
+
+[layers.rename]
+uid         = "mws_id"
+terrainClu  = "terrain_cluster"
+valley_are  = "valley_area"
+
+# ---------------------------------------------------------------------------
+# Layer 3 — aquifer (static)
+# Aquifer classification and yield attributes per MWS.
+# Source: GeoServer WFS, tehsil-partitioned (WFSSource).
+# URL pattern: https://geoserver.core-stack.org:8443/geoserver/aquifer/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=aquifer%3Aaquifer_vector_{district}_{tehsil}&outputFormat=application%2Fjson
+# ---------------------------------------------------------------------------
+
+[[layers]]
+name       = "aquifer"
+resolution = "static"
+# Uses the Pan India aquifer STAC item as reference for schema
+# In production, there should be a separate STAC item for the tehsil-partitioned WFS layer
+stac_item  = "file:///home/claude/stac_crawled/CorestackCatalogs_merged_collection/PanIndiaCatalogs/geological_and_geohydrological_layers/aquifer_vector/aquifer_vector.json"
+
+drop = ["newcode43", "area_in_ha"]
+
+[layers.rename]
+uid            = "mws_id"
+Age            = "age"
+Lithology_     = "litho_type_code"
+Major_Aq_1     = "aqui_type_code"
+Major_Aqui     = "aqui_type"
+Principal_     = "principal_soil"
+Recommende     = "rec_interventions"
+aquifer_class  = "aqui_class"
+aquifer_count  = "aqui_count"
+"yeild__"      = "yield"
+
+# ---------------------------------------------------------------------------
+# Layer 4 — soge (static)
+# State of groundwater extraction per MWS.
+# Source: GeoServer WFS, tehsil-partitioned (WFSSource).
+# URL pattern: https://geoserver.core-stack.org:8443/geoserver/soge/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=soge%3Asoge_vector_{district}_{tehsil}&outputFormat=application%2Fjson
+# ---------------------------------------------------------------------------
+
+[[layers]]
+name       = "soge"
+resolution = "static"
+# Uses the Pan India soge STAC item as reference for schema
+stac_item  = "file:///home/claude/stac_crawled/CorestackCatalogs_merged_collection/PanIndiaCatalogs/groundwater_layers/stage_of_groundwater_extraction_vector/stage_of_groundwater_extraction_vector.json"
+
+drop = ["area_in_ha", "soge_state", "soge_block", "soge_distr", "soge_tehsi"]
+
+[layers.rename]
+uid          = "mws_id"
+nat_discha   = "net_discharge"
+max_inters   = "max_intersection"
+
+# ---------------------------------------------------------------------------
+# Layer 5 — deltaG_well_depth (annual)
+# Annual groundwater depth change per MWS, wide-to-long reshape.
+# Source: GeoServer WFS, tehsil-partitioned (WFSSource).
+# URL pattern: https://geoserver.core-stack.org:8443/geoserver/mws_layers/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=mws_layers%3AdeltaG_well_depth_{district}_{tehsil}&outputFormat=application%2Fjson
+# Pattern: deltaG_{YYYY}  e.g. deltaG_2018
+# ---------------------------------------------------------------------------
+
+[[layers]]
+name             = "deltaG_well_depth"
+resolution       = "annual"
+# PLACEHOLDER: This stac_item URL needs to exist in the live STAC catalogue
+stac_item        = "https://geoserver.core-stack.org:8443/geoserver/stac/collections/mws_layers/items/deltaG_well_depth"
+temporal_pattern = "deltaG_{YYYY}"
+
+drop = ["area_in_ha"]
+
+[layers.rename]
+uid = "mws_id"
+
+# ---------------------------------------------------------------------------
+# Layer 6 — cropping_intensity (annual)
+# Annual cropping intensity index per MWS, wide-to-long reshape.
+# Source: GeoServer WFS, tehsil-partitioned (WFSSource).
+# URL pattern: https://geoserver.core-stack.org:8443/geoserver/crop_intensity/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=crop_intensity%3A{district}_{tehsil}_intensity&outputFormat=application%2Fjson
+# Pattern: ci_{YYYY}_{YYYY}  e.g. ci_2017_2018
+# ---------------------------------------------------------------------------
+
+[[layers]]
+name             = "cropping_intensity"
+resolution       = "annual"
+# PLACEHOLDER: This stac_item URL needs to exist in the live STAC catalogue
+stac_item        = "https://geoserver.core-stack.org:8443/geoserver/stac/collections/crop_intensity/items/cropping_intensity"
+temporal_pattern = "ci_{YYYY}_{YYYY}"
+
+drop = ["area_in_ha"]
+
+[layers.rename]
+uid                                          = "mws_id"
+total_cropable_area_ever_hydroyear_2017_2024 = "croppable_area_hy_2017_2024"
+
+# ---------------------------------------------------------------------------
+# Layer 7 — deltaG_fortnight (fortnightly)
+# Fortnightly groundwater depth change per MWS, wide-to-long reshape.
+# Source: GeoServer WFS, tehsil-partitioned (WFSSource).
+# URL pattern: https://geoserver.core-stack.org:8443/geoserver/mws_layers/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=mws_layers%3AdeltaG_fortnight_{district}_{tehsil}&outputFormat=application%2Fjson
+# Pattern: deltaG_{DATE}  e.g. deltaG_2021-01-01
+# ---------------------------------------------------------------------------
+
+[[layers]]
+name             = "deltaG_fortnight"
+resolution       = "fortnightly"
+# PLACEHOLDER: This stac_item URL needs to exist in the live STAC catalogue
+stac_item        = "https://geoserver.core-stack.org:8443/geoserver/stac/collections/mws_layers/items/deltaG_fortnight"
+temporal_pattern = "deltaG_{DATE}"
+
+drop = ["area_in_ha"]
+
+[layers.rename]
+uid = "mws_id"

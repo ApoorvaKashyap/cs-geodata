@@ -8,8 +8,8 @@ import pytest
 from src.descriptor.schema import LayerDescriptor
 from src.pipeline.normalise import normalise
 from src.pipeline.reshape import (
+    _extract_date,
     _extract_first_year,
-    _extract_year_fortnight,
     reshape,
 )
 
@@ -44,7 +44,7 @@ def _fortnightly_layer(**kwargs: object) -> LayerDescriptor:
         "name": "ndvi",
         "resolution": "fortnightly",
         "stac_item": "https://example.test/stac/item.json",
-        "temporal_pattern": "{col}_{YYYY}_{NNN}",
+        "temporal_pattern": "{col}_{DATE}",
     }
     defaults.update(kwargs)
     return LayerDescriptor.model_validate(defaults)
@@ -175,10 +175,13 @@ def test_extract_first_year_raises_if_no_year() -> None:
         _extract_first_year("no_year_here")
 
 
-def test_extract_year_fortnight_standard() -> None:
-    year, fortnight = _extract_year_fortnight("deltaG_2021_007")
-    assert year == 2021
-    assert fortnight == 7
+def test_extract_date_standard() -> None:
+    assert _extract_date("deltaG_2021-01-15").isoformat() == "2021-01-15"
+
+
+def test_extract_date_raises_if_no_date() -> None:
+    with pytest.raises(RuntimeError, match="Cannot extract date"):
+        _extract_date("deltaG_2021_007")
 
 
 # ---------------------------------------------------------------------------
@@ -220,15 +223,19 @@ def test_reshape_fortnightly_basic() -> None:
     frame = pl.LazyFrame(
         {
             "mws_id": ["m1"],
-            "deltaG_2021_001": [0.5],
-            "deltaG_2021_002": [0.6],
+            "deltaG_2021-01-01": [0.5],
+            "deltaG_2021-01-15": [0.6],
         }
     )
-    layer = _fortnightly_layer(temporal_pattern="{col}_{YYYY}_{NNN}")
+    layer = _fortnightly_layer(temporal_pattern="{col}_{DATE}")
     result = reshape(frame, layer, key="mws_id").collect()
 
     assert "mws_id" in result.columns
-    assert "year" in result.columns
-    assert "fortnight" in result.columns
+    assert "date" in result.columns
+    assert "year" not in result.columns
+    assert "fortnight" not in result.columns
     assert result.height == 2
-    assert sorted(result["fortnight"].to_list()) == [1, 2]
+    assert sorted(date.isoformat() for date in result["date"].to_list()) == [
+        "2021-01-01",
+        "2021-01-15",
+    ]

@@ -133,3 +133,50 @@ def test_validate_unique_entities_reports_duplicates() -> None:
 
     assert len(errors) == 1
     assert errors[0].field == "entity"
+
+
+def test_descriptor_validation_matches_date_temporal_pattern() -> None:
+    descriptor = EntityDescriptor.from_toml(
+        """
+        entity = "mws"
+        key = "mws_id"
+        geometry = "geometry"
+        partition_by = "river_basin"
+
+        [[layers]]
+        name = "base"
+        resolution = "static"
+        stac_item = "https://example.test/stac/base.json"
+
+        [layers.rename]
+        uid = "mws_id"
+
+        [[layers]]
+        name = "deltaG_fortnight"
+        resolution = "fortnightly"
+        stac_item = "https://example.test/stac/deltag.json"
+        temporal_pattern = "{col}_{DATE}"
+
+        [layers.rename]
+        uid = "mws_id"
+        """
+    )
+    stac_items = {
+        "https://example.test/stac/base.json": {
+            "table:columns": [
+                {"name": "uid"},
+                {"name": "river_basin"},
+                {"name": "geometry"},
+            ]
+        },
+        "https://example.test/stac/deltag.json": {
+            "table:columns": [
+                {"name": "uid"},
+                {"name": "deltaG_2021-01-01"},
+            ]
+        },
+    }
+
+    result = validate_descriptor(descriptor, stac_items)
+
+    assert result.is_valid

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import date
 
 import polars as pl
 
@@ -21,7 +22,7 @@ def reshape(frame: pl.LazyFrame, layer: LayerDescriptor, key: str) -> pl.LazyFra
 
     Output schemas:
         - annual: ``(key, year, col1, col2, ...)``
-        - fortnightly: ``(key, year, fortnight, col1, col2, ...)``
+        - fortnightly: ``(key, date, col1, col2, ...)``
 
     For temporal column names that encode two years (e.g. ``ci_2017_2018``),
     only the first year is kept (2017).
@@ -111,12 +112,10 @@ def _melt_fortnightly(
         value_name="_value",
     )
 
-    year_fortnight_data = [_extract_year_fortnight(col) for col in temporal_cols]
     mapping = pl.DataFrame(
         {
             "_temporal_col": temporal_cols,
-            "year": [yf[0] for yf in year_fortnight_data],
-            "fortnight": [yf[1] for yf in year_fortnight_data],
+            "date": [_extract_date(col) for col in temporal_cols],
             "_base_col": [value_col_names[col] for col in temporal_cols],
         }
     )
@@ -162,7 +161,7 @@ def _pivot_base_cols_fortnightly(
     pivoted = (
         collected.pivot(
             on="_base_col",
-            index=[*id_cols, "year", "fortnight"],
+            index=[*id_cols, "date"],
             values="_value",
             aggregate_function="first",
         )
@@ -170,7 +169,7 @@ def _pivot_base_cols_fortnightly(
         .drop("_temporal_col", strict=False)
     )
 
-    time_cols = ["year", "fortnight"]
+    time_cols = ["date"]
     non_key_id = [c for c in id_cols if c != key]
     final_cols = [key, *time_cols, *non_key_id, *base_cols]
     available = [c for c in final_cols if c in set(pivoted.collect_schema().names())]
@@ -203,13 +202,8 @@ def _extract_first_year(col_name: str) -> int:
     return int(years[0])
 
 
-def _extract_year_fortnight(col_name: str) -> tuple[int, int]:
-    year_match = re.search(r"\d{4}", col_name)
-    if not year_match:
-        raise RuntimeError(f"Cannot extract year from column name '{col_name}'.")
-    year = int(year_match.group())
-
-    remaining = col_name[year_match.end() :]
-    fortnight_match = re.search(r"\d{1,3}", remaining)
-    fortnight = int(fortnight_match.group()) if fortnight_match else 0
-    return year, fortnight
+def _extract_date(col_name: str) -> date:
+    date_match = re.search(r"\d{4}-\d{2}-\d{2}", col_name)
+    if not date_match:
+        raise RuntimeError(f"Cannot extract date from column name '{col_name}'.")
+    return date.fromisoformat(date_match.group())

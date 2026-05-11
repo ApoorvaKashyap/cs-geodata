@@ -8,7 +8,6 @@ import fsspec
 import polars as pl
 
 from src.sources.base import AbstractSource
-from src.utils.configs import get_settings
 
 
 class S3Source(AbstractSource):
@@ -46,22 +45,16 @@ class S3Source(AbstractSource):
         return _read_file(local_path)
 
     def _download(self) -> Path:
-        settings = get_settings()
-        storage_options: dict[str, str | None] = {
-            "endpoint_url": settings.s3_endpoint_url,
-            "key": settings.aws_access_key_id,
-            "secret": settings.aws_secret_access_key,
-            "client_kwargs": {"region_name": settings.aws_region},
-        }
+        from src.utils.s3 import get_s3_storage_options
+
+        storage_options = get_s3_storage_options()
 
         suffix = Path(self.asset_href.split("?")[0]).suffix.lower()
         local_path = self.scratch_dir / f"source{suffix}"
 
         try:
             with (
-                fsspec.open(
-                    self.asset_href, mode="rb", **_clean(storage_options)
-                ) as src,
+                fsspec.open(self.asset_href, mode="rb", **storage_options) as src,
                 local_path.open("wb") as dst,
             ):
                 dst.write(src.read())
