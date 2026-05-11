@@ -17,4 +17,4 @@ RUN uv sync --locked
 COPY --exclude=.venv --exclude=.git --exclude=.env . /app/
 
 
-CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "80", "--reload"]
+CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
