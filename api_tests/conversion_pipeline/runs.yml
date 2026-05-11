@@ -1,0 +1,24 @@
+info:
+  name: runs
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{base_url}}/runs"
+  body:
+    type: json
+    data: |-
+      {
+        "descriptors": [
+          "s3://geo-benchmark-data/descriptors/v1/mws_v1.toml"
+        ],
+        "output_root": "s3://geo-benchmark-data/entities/"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

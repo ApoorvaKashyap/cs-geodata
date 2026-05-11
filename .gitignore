@@ -228,3 +228,4 @@ data/
 logs/
 .temp/
 *.parquet
+environments/

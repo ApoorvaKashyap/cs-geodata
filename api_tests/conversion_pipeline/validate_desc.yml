@@ -1,0 +1,20 @@
+info:
+  name: validate_desc
+  type: http
+
+http:
+  method: POST
+  url: "{{base_url}}/descriptors/validate"
+  body:
+    type: json
+    data: |-
+      {
+        "descriptor_uri": "s3://geo-benchmark-data/descriptors/v1/mws_v1.toml"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
