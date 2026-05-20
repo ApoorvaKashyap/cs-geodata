@@ -5,12 +5,14 @@ from pathlib import Path
 
 import fsspec  # type: ignore[import-untyped]
 import polars as pl
+import polars_st as st  # type: ignore[import-untyped]
 import pyarrow.parquet as pq  # type: ignore[import-untyped]
 import pyogrio  # type: ignore[import-untyped]
 import requests  # type: ignore[import-untyped]
 from loguru import logger
 from tqdm import tqdm  # type: ignore[import-untyped]
 
+from src.conversion.helpers.cleaners import rename_and_drop
 from src.utils.configs import settings
 
 MWS_URL_MAPPING = {
@@ -37,36 +39,94 @@ async def get_active() -> pl.DataFrame:
     return _df
 
 
-async def get_geojson(layer: str, district: str, tehsil: str) -> int:
-    """Download a GeoJSON file from GeoServer for a specific tehsil layer.
+def download_and_convert_geojson(
+    layer: str,
+    district: str,
+    tehsil: str,
+    state_name: str,
+    district_name: str,
+    tehsil_name: str,
+    cols_rename: dict[str, str],
+    cols_drop: list[str],
+) -> int:
+    """Download a GeoJSON from GeoServer, clean it, and persist as Parquet.
+
+    Combines the former download-only step with the per-tehsil column cleaning
+    and admin-boundary tagging that was previously performed on the main thread
+    inside ``merge_tehsils_on_layer``.  Running this inside an RQ worker frees
+    the pipeline orchestrator from the CPU-heavy GDAL GeoJSON parse.
+
+    The output Parquet file is written to
+    ``{settings.temp_path}/{layer}_{district}_{tehsil}.parquet``.
 
     Args:
-        layer: The name of the layer to fetch.
-        district: The district slug name.
-        tehsil: The tehsil slug name.
+        layer: Layer name key present in MWS_URL_MAPPING.
+        district: Slug-form district name used to build the GeoServer URL.
+        tehsil: Slug-form tehsil name used to build the GeoServer URL.
+        state_name: Human-readable state label to tag each row.
+        district_name: Human-readable district label to tag each row.
+        tehsil_name: Human-readable tehsil label to tag each row.
+        cols_rename: Column rename mapping to apply after reading the file.
+        cols_drop: Column names to drop after reading the file.
 
     Returns:
-        0 if the download was successful, -1 otherwise.
+        0 on success, -1 on failure.
     """
     url = MWS_URL_MAPPING[layer].format(district=district, tehsil=tehsil)
     logger.info(
-        f"Fetching geojson for layer {layer} "
-        f"and district {district} and tehsil {tehsil} "
-        f"using url: {url}"
+        f"Fetching + converting layer={layer} district={district} tehsil={tehsil}"
     )
+
     response = requests.get(url)
-    if response.status_code == 200:
-        try:
-            with open(
-                f"{settings.temp_path}/{layer}_{district}_{tehsil}.geojson", "w"
-            ) as f:
-                f.write(response.text)
-            return 0
-        except Exception as e:
-            logger.error(
-                f"Failed to write geojson for {layer} {district} {tehsil}: {e}"
+    if response.status_code != 200:
+        logger.warning(
+            f"HTTP {response.status_code} for {layer}/{district}/{tehsil} — skipping"
+        )
+        return -1
+
+    geojson_path = f"{settings.temp_path}/{layer}_{district}_{tehsil}.geojson"
+    parquet_path = f"{settings.temp_path}/{layer}_{district}_{tehsil}.parquet"
+
+    try:
+        with open(geojson_path, "w") as fh:
+            fh.write(response.text)
+
+        warnings.filterwarnings("ignore", category=RuntimeWarning, module="pyogrio")
+        df = st.read_file(geojson_path)
+
+        if df.is_empty():
+            logger.warning(
+                f"Empty GeoJSON for {layer}/{district}/{tehsil} — skipping"
             )
-    return -1
+            return 0
+
+        df = rename_and_drop(
+            df.lazy(), cols_rename, cols_drop
+        ).collect(engine="streaming")
+
+        if "geometry" not in df.columns and "geom" in df.columns:
+            df = df.rename({"geom": "geometry"})
+
+        # Tag every row with its admin boundary metadata.
+        # (Previously done on the main thread inside merge_tehsils_on_layer.)
+        df = df.with_columns(
+            [
+                pl.lit(state_name).alias("state"),
+                pl.lit(district_name).alias("district"),
+                pl.lit(tehsil_name).alias("tehsil"),
+            ]
+        )
+
+        df.write_parquet(parquet_path, compression="zstd")
+        logger.info(f"Written {parquet_path} ({df.height} rows)")
+        return 0
+
+    except Exception as exc:
+        logger.error(f"Failed to convert {layer}/{district}/{tehsil}: {exc}")
+        return -1
+
+    finally:
+        Path(geojson_path).unlink(missing_ok=True)
 
 
 async def convert_base(

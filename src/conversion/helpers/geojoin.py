@@ -30,7 +30,7 @@ def fill_missing_admin_boundaries(
     needs_admin = merged.filter(pl.col("state").is_null())
 
     # Only collect the columns needed for the spatial join (lightweight)
-    join_keys = needs_admin.select(["mws_id", "version", "geometry"]).collect(
+    join_keys = needs_admin.select(["mws_id", "geometry"]).collect(
         engine="streaming"
     )
 
@@ -72,14 +72,12 @@ def fill_missing_admin_boundaries(
             sql = """
                 SELECT
                     b.mws_id,
-                    b.version,
                     t.state,
                     t.district,
                     t.tehsil
                 FROM (
                     SELECT
                         mws_id,
-                        version,
                         ST_Centroid(ST_GeomFromWKB(geometry)) AS centroid
                     FROM batch_table
                 ) b
@@ -117,7 +115,7 @@ def fill_missing_admin_boundaries(
         # Deduplicate: centroids on tehsil boundaries can match
         # multiple tehsils via ST_Within, producing 2 rows per polygon
         pre_dedup = admin_lookup.height
-        admin_lookup = admin_lookup.unique(subset=["mws_id", "version"])
+        admin_lookup = admin_lookup.unique(subset=["mws_id"])
         deduped = pre_dedup - admin_lookup.height
         if deduped > 0:
             logger.info(f"Removed {deduped} boundary-overlap duplicates")
@@ -134,7 +132,7 @@ def fill_missing_admin_boundaries(
     # (avoids materializing 2584 columns during spatial join)
     filled = needs_admin.drop(["state", "district", "tehsil"]).join(
         admin_lookup.lazy(),
-        on=["mws_id", "version"],
+        on="mws_id",
         how="left",
     )
 

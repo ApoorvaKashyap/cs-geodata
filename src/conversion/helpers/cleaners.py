@@ -3,6 +3,18 @@ import re
 
 import polars as pl
 
+# ---------------------------------------------------------------------------
+# Column classification regexes
+# ---------------------------------------------------------------------------
+# Matches a column that ends with an ISO date (YYYY-MM-DD), with or without
+# a preceding underscore — e.g. "dg_deltag_2023-04-01" or "2023-04-01".
+_FORTNIGHTLY_DATE_RE = re.compile(
+    r"\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$"
+)
+# Matches a year-range (YYYY_YYYY / YYYY-YYYY) or a bare year anywhere in the
+# column name — e.g. "ci_kharif_2019_2020" or "te_slope_2023".
+_ANNUAL_YEAR_RE = re.compile(r"\d{4}[_-]\d{4}|\d{4}")
+
 
 def clean_label(label: str) -> str:
     """Normalise a location label to a safe, lowercase slug.
@@ -299,3 +311,51 @@ def unnest_json_cols(layer: pl.LazyFrame) -> pl.LazyFrame:
             exprs.append(parsed.struct.field(k).alias(new_col))
 
     return layer.with_columns(exprs).drop(json_cols)
+
+
+def classify_columns(
+    cols: list[str],
+    keep_always: list[str],
+) -> tuple[list[str], list[str], list[str]]:
+    """Classify merged-frame column names into static, fortnightly, and annual buckets.
+
+    Classification rules (applied in order):
+    1. Columns in *keep_always* → static (identity / common columns).
+    2. Columns whose name contains the substring ``"net"`` → dropped entirely
+       (they hold derived data that is not needed downstream).
+    3. Columns whose name ends with an ISO date (``YYYY-MM-DD``) → fortnightly.
+    4. Columns whose name contains a year-range (``YYYY_YYYY`` / ``YYYY-YYYY``)
+       or a bare four-digit year anywhere → annual.
+    5. Everything else → static.
+
+    Args:
+        cols: All column names from the merged frame.
+        keep_always: Column names that must always land in the static bucket
+            (e.g. ``["mws_id", "geometry", "tehsil", ...]``).
+
+    Returns:
+        A 3-tuple ``(static_cols, fortnightly_cols, annual_cols)`` where every
+        column in *cols* appears in exactly one bucket, or is silently dropped
+        (net columns).
+    """
+    keep_set = set(keep_always)
+    static: list[str] = list(keep_always)  # preserve order of common cols first
+    fortnightly: list[str] = []
+    annual: list[str] = []
+
+    for col in cols:
+        if col in keep_set:
+            continue  # already added above
+
+        # Drop derived net columns
+        if "net" in col:
+            continue
+
+        if _FORTNIGHTLY_DATE_RE.search(col):
+            fortnightly.append(col)
+        elif _ANNUAL_YEAR_RE.search(col):
+            annual.append(col)
+        else:
+            static.append(col)
+
+    return static, fortnightly, annual

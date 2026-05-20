@@ -36,9 +36,9 @@ class LayerConversionRequest(BaseModel):
         description="Join key shared across all layers.",
         default="uid",
     )
-    parquet_version: float = Field(default=1.0)
-    use_prev_mapping: bool = Field(default=False)
-    layer_version: str = Field(description="Version of the layer data.", default="")
+    min_version: float = Field(description="Minimum layer version to include (inclusive).", default=0.0)
+    max_version: float = Field(description="Maximum layer version to include (inclusive).", default=9999.0)
+    layer_version: str = Field(description="S3 path to the layer version CSV.", default="")
 
 
 class BaseLayers(BaseModel):

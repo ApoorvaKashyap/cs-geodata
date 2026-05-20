@@ -3,83 +3,11 @@ import warnings
 import polars as pl
 import polars_st as st
 from loguru import logger
-from pyogrio.errors import DataSourceError  # type: ignore[import-untyped]
-from tqdm import tqdm  # type: ignore[import-untyped]
 
-from src.conversion.helpers.cleaners import clean_label, rename_and_drop
 from src.utils.configs import settings
 
 warnings.filterwarnings("ignore", category=RuntimeWarning, module="pyogrio")
 DROP_BEFORE_JOIN = ["id", "tehsil", "district", "state", "geometry"]
-
-
-def merge_tehsils_on_layer(
-    layer: str,
-    tehsils: pl.LazyFrame,
-    cols_rename: dict[str, str],
-    drop_cols: list[str],
-) -> pl.LazyFrame:
-    """Merge all tehsil-level GeoJSONs for a specific layer.
-
-    Args:
-        layer: Name of the layer being processed.
-        tehsils: Dataframe containing active tehsil metadata (name, district, state).
-        cols_rename: Dictionary mapping original column names to target names.
-        drop_cols: List of columns to drop from the individual GeoJSONs.
-
-    Returns:
-        A concatenated LazyFrame containing data from all found tehsil files.
-
-    Raises:
-        ValueError: If no valid GeoJSON files were found for the layer.
-    """
-    tehsil_data = tehsils.collect(engine="streaming")
-    frames: list[pl.LazyFrame] = []
-
-    for row in tqdm(tehsil_data.to_dicts()):
-        tehsil_name = clean_label(row.get("tehsil_name", ""))
-        district_name = clean_label(row.get("district_name", ""))
-
-        file_path = f"{settings.temp_path}{layer}_{district_name}_{tehsil_name}.geojson"
-
-        try:
-            df = st.read_file(file_path)
-            df: pl.DataFrame = rename_and_drop(
-                df.lazy(), cols_rename, drop_cols
-            ).collect(engine="streaming")
-            if "geometry" not in df.columns and "geom" in df.columns:
-                df = pl.DataFrame(df.rename({"geom": "geometry"}))
-            if df.is_empty():
-                continue
-            exprs = []
-            for col_target, col_source in [
-                ("version", "algorithm version"),
-                ("tehsil", "tehsil_name"),
-                ("district", "district_name"),
-                ("state", "state_name"),
-            ]:
-                val = row.get(col_source)
-                if col_target == "version":
-                    val_expr = pl.lit(val).cast(pl.Float64, strict=False)
-                else:
-                    val_expr = pl.lit(val)
-
-                exprs.append(val_expr.alias(col_target))
-
-            if exprs:
-                df = pl.DataFrame(df.with_columns(exprs))
-
-            frames.append(df.lazy())
-        except DataSourceError:
-            logger.error(f"File not found: {file_path}")
-            continue
-
-    if not frames:
-        raise ValueError(f"No files found for layer: {layer}")
-
-    merged = pl.concat(frames, how="diagonal_relaxed")
-
-    return merged.lazy()
 
 
 def merge_all_layers(
@@ -109,7 +37,7 @@ def merge_all_layers(
 
     logger.info("Extracting location metadata from layers")
     location_meta = _extract_location_meta(layer_results)
-    base = base.join(location_meta, on=["mws_id", "version"], how="left")
+    base = base.join(location_meta, on="mws_id", how="left")
 
     merged = base
     for layer_name, layer_df in layer_results.items():
@@ -126,14 +54,13 @@ def merge_all_layers(
             )
             layer_df = layer_df.drop("area_in_ha")
 
-        # Deduplicate: polygons spanning multiple tehsils appear in
-        # multiple GeoJSON files. Without this, sequential left joins
-        # fan out multiplicatively (2^N_layers duplicates per polygon).
-        layer_df = layer_df.unique(subset=["mws_id", "version"])
+        # Deduplicate on mws_id alone — polygons spanning multiple tehsils
+        # appear in multiple GeoJSON files.
+        layer_df = layer_df.unique(subset=["mws_id"])
 
         merged = merged.join(
             layer_df,
-            on=["mws_id", "version"],
+            on="mws_id",
             how="left",
             suffix=f"_{layer_name}",
         )
@@ -187,24 +114,22 @@ def _extract_location_meta(
         schema = layer_df.collect_schema().names()
 
         if all(
-            c in schema for c in ["mws_id", "version", "tehsil", "district", "state"]
+            c in schema for c in ["mws_id", "tehsil", "district", "state"]
         ):
             logger.info(f"Using '{layer_name}' as location metadata source")
             meta = layer_df.select(
-                ["mws_id", "version", "tehsil", "district", "state"]
-            ).unique(subset=["mws_id", "version"])
+                ["mws_id", "tehsil", "district", "state"]
+            ).unique(subset=["mws_id"])
 
-            # Warn if there are duplicate mws_id+version after dedup
-            # (shouldn't happen but indicates upstream data issues)
             count = meta.collect(engine="streaming").height
             logger.info(
-                f"Location metadata: {count} unique mws_id+version pairs "
+                f"Location metadata: {count} unique mws_id pairs "
                 f"from '{layer_name}'"
             )
             return meta
 
     raise ValueError(
-        "No layer contains all of: mws_id, version, tehsil, district, state. "
+        "No layer contains all of: mws_id, tehsil, district, state. "
         "Cannot extract location metadata."
     )
 
@@ -226,16 +151,16 @@ def _get_missing_mws_ids(
     """
     all_layer_ids = pl.concat(
         [
-            layer_df.select(["mws_id", "version"]).unique()
+            layer_df.select("mws_id").unique()
             for layer_df in layer_results.values()
             if "mws_id" in layer_df.collect_schema().names()
         ],
         how="diagonal_relaxed",
     ).unique()
 
-    base_ids = base.select(["mws_id", "version"])
+    base_ids = base.select("mws_id")
 
-    missing = base_ids.join(all_layer_ids, on=["mws_id", "version"], how="anti")
+    missing = base_ids.join(all_layer_ids, on="mws_id", how="anti")
 
     missing_count = missing.collect(engine="streaming").height
     logger.info(

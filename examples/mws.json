@@ -71,7 +71,7 @@
     "mws": "s3://geo-benchmark-data/base_converted/MWSv2.parquet"
   },
   "key": "uid",
-  "parquet_version": 1,
-  "use_prev_mapping": false,
+  "min_version": 1.0,
+  "max_version": 2.0,
   "layer_version": "s3://geo-benchmark-data/metadata/mws_layer_version.csv"
 }
