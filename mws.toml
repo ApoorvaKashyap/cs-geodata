@@ -29,7 +29,7 @@ entity = "mws"
 key = "mws_id"
 geometry = "geometry"
 base = "mws_boundaries"
-min_version= "1"
+min_version = "1"
 max_version = "2"
 active_locations = "http://10.194.180.123:8000/mws_layer_version.csv"
 
@@ -37,7 +37,7 @@ active_locations = "http://10.194.180.123:8000/mws_layer_version.csv"
 super_layer_source = "s3://geo-benchmark-data/stac_pan_india/subbasin_boundaries_vector.geojson"
 super_layer_key = "object_id"
 super_field = "sub_basin"
-partition_by = "sub_basin"  # Partition by super field
+partition_by = "sub_basin"                                                                       # Partition by super field
 
 [[layers]]
 name = "mws_boundaries"
@@ -48,6 +48,7 @@ drop = ["area_in_ha", "id"]
 
 [layers.rename]
 uid = "mws_id"
+geom = "geometry"
 
 [[layers]]
 name = "terrain"

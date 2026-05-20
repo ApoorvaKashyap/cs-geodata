@@ -83,9 +83,23 @@ async def run_mws_pipeline(request: LayerConversionRequest) -> None:
     )
 
     logger.info("Fetching base layer")
-    base = await _fetch_base(next(iter(request.base_layer.values())))
+    base_descriptor = request.base_layer_descriptor
+    if base_descriptor.source is None:
+        raise ValueError(
+            f"Base layer '{base_descriptor.name}' has no 'source' path in the descriptor."
+        )
+    base = await _fetch_base(base_descriptor.source)
+
+    # Build rename map from the TOML descriptor.
+    # geom→geometry is always enforced as a standardisation step so that the
+    # rest of the pipeline can assume a consistent geometry column name,
+    # regardless of what the source file calls it.
+    base_rename = {**base_descriptor.rename}
+    base_rename.setdefault("geom", "geometry")
+
     base = (
-        base.rename({"uid": "mws_id", "geom": "geometry"})
+        base.drop(base_descriptor.drop, strict=False)
+        .rename(base_rename, strict=False)
         .with_columns(
             st.geom("geometry").st.set_srid(4326).st.to_wkb().alias("geometry")  # type: ignore[attr-defined]
         )
@@ -479,7 +493,7 @@ async def _process_layer(
     """
     results: dict[str, pl.LazyFrame] = {}
 
-    work = await get_all_geojsons(request.layers, request.column_map)
+    work = await get_all_geojsons(request.attribute_layers)
 
     while True:
         completed = await poll_completion(work)
@@ -487,7 +501,8 @@ async def _process_layer(
             break
         await asyncio.sleep(5)
 
-    for layer in request.layers:
+    for descriptor in request.attribute_layers:
+        layer = descriptor.name
         parquet_glob = f"{settings.temp_path}/{layer}_*.parquet"
         matching = list(Path(settings.temp_path).glob(f"{layer}_*.parquet"))
         if not matching:

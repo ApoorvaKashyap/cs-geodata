@@ -2,29 +2,27 @@ import polars as pl
 from loguru import logger
 from rq.job import Job
 
-from src.app.models import ColumnMapping
+from src.app.models import LayerDescriptor
 from src.conversion.helpers.api import download_and_convert_geojson, get_active
 from src.conversion.helpers.cleaners import clean_label, clean_tehsils
 from src.work.work_queue import get_status, mq
 
 
 async def _create_tehsil_map(
-    layer: str,
+    descriptor: LayerDescriptor,
     tehsils_t: pl.DataFrame,
-    column_mapping: ColumnMapping,
 ) -> dict[str, Job]:
-    """Enqueue GeoJSON download-and-convert tasks for a layer across all active tehsils.
+    """Enqueue GeoJSON download-and-convert tasks for one layer across all active tehsils.
 
     Each enqueued task downloads the GeoJSON, cleans the columns, tags admin
     boundaries, and writes a Parquet file — all inside the RQ worker process.
 
     Args:
-        layer: The name of the layer.
-        tehsils_t: DataFrame containing tehsil information.
-        column_mapping: Per-layer column rename/drop configuration.
+        descriptor: The layer descriptor containing the URL template and column mapping.
+        tehsils_t: DataFrame containing active tehsil information.
 
     Returns:
-        A dictionary mapping task IDs to rq Job objects.
+        A dictionary mapping task keys to rq Job objects.
     """
     tmap: dict[str, Job] = {}
 
@@ -33,29 +31,26 @@ async def _create_tehsil_map(
         tehsil_slug = clean_label(row["tehsil_name"])
         task = mq.enqueue(
             download_and_convert_geojson,
-            layer,
+            descriptor.name,
             district_slug,
             tehsil_slug,
             row["state_name"],
             row["district_name"],
             row["tehsil_name"],
-            column_mapping.rename_columns,
-            column_mapping.drop_columns,
+            descriptor.url_template,
+            descriptor.rename,
+            descriptor.drop,
         )
-        tmap[f"{layer}_{district_slug}_{tehsil_slug}"] = task
+        tmap[f"{descriptor.name}_{district_slug}_{tehsil_slug}"] = task
 
     return tmap
 
 
-async def get_all_geojsons(
-    layers: list[str],
-    column_map: dict[str, ColumnMapping],
-) -> dict:
-    """Queue GeoJSON download-and-convert tasks for multiple layers.
+async def get_all_geojsons(attribute_layers: list[LayerDescriptor]) -> dict:
+    """Queue download-and-convert tasks for all WFS collection layers.
 
     Args:
-        layers: List of layer names to download.
-        column_map: Mapping of layer name to its column rename/drop configuration.
+        attribute_layers: List of non-base LayerDescriptors (type='collection').
 
     Returns:
         A dictionary mapping layer names to their corresponding tehsil task maps.
@@ -63,11 +58,10 @@ async def get_all_geojsons(
     tehsils_t = clean_tehsils(await get_active()).collect(engine="streaming")
     all_geojsons: dict = {}
 
-    for layer in layers:
-        mapping = column_map.get(layer, ColumnMapping())
-        tmap = await _create_tehsil_map(layer, tehsils_t, mapping)
-        logger.info(f"Created tehsil map for layer {layer}")
-        all_geojsons[layer] = tmap
+    for descriptor in attribute_layers:
+        tmap = await _create_tehsil_map(descriptor, tehsils_t)
+        logger.info(f"Created tehsil map for layer {descriptor.name}")
+        all_geojsons[descriptor.name] = tmap
 
     return all_geojsons
 
