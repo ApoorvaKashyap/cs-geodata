@@ -73,6 +73,27 @@ class LayerConversionRequest(BaseModel):
     output_path: str = Field(
         default="", description="Destination directory for output Parquet files."
     )
+    super_layer_source: str | None = Field(
+        default=None,
+        description=(
+            "Path or URI to the super-layer file used for hierarchical partitioning "
+            "(e.g. sub-basin boundaries GeoJSON on S3)."
+        ),
+    )
+    super_field: str | None = Field(
+        default=None,
+        description=(
+            "Column name inside the super-layer file whose value is assigned to each "
+            "base entity row via a centroid-in-polygon spatial join."
+        ),
+    )
+    partition_by: str | None = Field(
+        default=None,
+        description=(
+            "Output partition column name. Usually the same as super_field. "
+            "All output Parquet files are partitioned on this column."
+        ),
+    )
     layers: list[LayerDescriptor] = Field(default_factory=list)
 
     @property
@@ -110,9 +131,19 @@ class ConversionRequest(BaseModel):
 
 
 class BaseLayers(BaseModel):
-    layers: dict[Literal["mws", "farms", "forests"], LocationField] = Field(
-        description="Filepath to base layers.",
-        default_factory=dict,
+    base_layer_source: str = Field(
+        description="Path or S3 URI to the base layer.",
+    )
+    output_path: str = Field(
+        description="Destination path for the output Parquet file.",
+    )
+    super_layer_source: str | None = Field(
+        default=None,
+        description="Optional path or S3 URI to the super-layer file.",
+    )
+    super_field: str | None = Field(
+        default=None,
+        description="Optional column name inside the super-layer file.",
     )
 
 

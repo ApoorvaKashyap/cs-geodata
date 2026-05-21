@@ -29,9 +29,9 @@ entity = "mws"
 key = "mws_id"
 geometry = "geometry"
 base = "mws_boundaries"
-min_version = "1"
+min_version = "1.1"
 max_version = "2"
-active_locations = "http://10.194.180.123:8000/mws_layer_version.csv"
+active_locations = "s3://geo-benchmark-data/metadata/mws_layer_version.csv"
 
 # Super layer for hierarchical partitioning
 super_layer_source = "s3://geo-benchmark-data/stac_pan_india/subbasin_boundaries_vector.geojson"
@@ -42,9 +42,8 @@ partition_by = "sub_basin"                                                      
 [[layers]]
 name = "mws_boundaries"
 type = "item"
-stac_item = "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs_merged_collection/PanIndiaCatalogs/hydrological_boundaries/microwatershed_boundaries_v2_vector/microwatershed_boundaries_v2_vector.json"
-source = "s3://geo-benchmark-data/stac_pan_india/Microwatershed_boundries_v2.geojson"
-drop = ["area_in_ha", "id"]
+source = "s3://geo-benchmark-data/converted_stac/mws/base.parquet"
+drop = ["id"]
 
 [layers.rename]
 uid = "mws_id"
@@ -53,9 +52,7 @@ geom = "geometry"
 [[layers]]
 name = "terrain"
 type = "collection"
-sample_item = "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs_merged_collection/tehsil_wise/bihar/banka/banka/bihar_banka_banka_terrain_vector/bihar_banka_banka_terrain_vector.json"
 url_template = "https://geoserver.core-stack.org:8443/geoserver/terrain/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=terrain%3A{district}_{tehsil}_cluster&outputFormat=application%2Fjson"
-stac_item = "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs_merged_collection/tehsil_wise/catalog.json"
 drop = ["area_in_ha"]
 
 [layers.rename]
@@ -67,7 +64,6 @@ valley_are = "valley_area"
 [[layers]]
 name = "aquifer"
 type = "collection"
-sample_item = "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs_merged_collection/tehsil_wise/bihar/banka/banka/bihar_banka_banka_aquifer_vector/bihar_banka_banka_aquifer_vector.json"
 url_template = "https://geoserver.core-stack.org:8443/geoserver/aquifer/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=aquifer%3Aaquifer_vector_{district}_{tehsil}&outputFormat=application%2Fjson"
 drop = ["newcode43", "area_in_ha"]
 
@@ -86,7 +82,6 @@ aquifer_count = "aqui_count"
 [[layers]]
 name = "soge"
 type = "collection"
-sample_item = "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs_merged_collection/tehsil_wise/bihar/banka/banka/bihar_banka_banka_stage_of_groundwater_extraction_vector/bihar_banka_banka_stage_of_groundwater_extraction_vector.json"
 url_template = "https://geoserver.core-stack.org:8443/geoserver/soge/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=soge%3Asoge_vector_{district}_{tehsil}&outputFormat=application%2Fjson"
 # drop = ["area_in_ha", "soge_state", "soge_block", "soge_distr", "soge_tehsi"]
 
@@ -98,7 +93,6 @@ nat_discha = "net_discharge"
 [[layers]]
 name = "deltaG_well_depth"
 type = "collection"
-sample_item = "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs_merged_collection/tehsil_wise/bihar/banka/banka/bihar_banka_banka_change_in_well_depth_vector/bihar_banka_banka_change_in_well_depth_vector.json"
 url_template = "https://geoserver.core-stack.org:8443/geoserver/mws_layers/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=mws_layers%3AdeltaG_well_depth_{district}_{tehsil}&outputFormat=application%2Fjson"
 drop = ["area_in_ha"]
 
@@ -108,7 +102,6 @@ uid = "mws_id"
 [[layers]]
 name = "cropping_intensity"
 type = "collection"
-sample_item = "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs_merged_collection/tehsil_wise/bihar/banka/banka/bihar_banka_banka_cropping_intensity_vector/bihar_banka_banka_cropping_intensity_vector.json"
 url_template = "https://geoserver.core-stack.org:8443/geoserver/crop_intensity/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=crop_intensity%3A{district}_{tehsil}_intensity&outputFormat=application%2Fjson"
 drop = ["area_in_ha", "total_cropable_area_ever_hydroyear_2017_2024"]
 
@@ -118,7 +111,6 @@ uid = "mws_id"
 [[layers]]
 name = "deltaG_fortnight"
 type = "collection"
-sample_item = "https://spatio-temporal-asset-catalog.s3.ap-south-1.amazonaws.com/CorestackCatalogs_merged_collection/tehsil_wise/bihar/banka/banka/bihar_banka_banka_water_balance_fortnightly_vector/bihar_banka_banka_water_balance_fortnightly_vector.json"
 url_template = "https://geoserver.core-stack.org:8443/geoserver/mws_layers/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=mws_layers%3AdeltaG_fortnight_{district}_{tehsil}&outputFormat=application%2Fjson"
 drop = ["area_in_ha"]
 resolution = "fortnightly"

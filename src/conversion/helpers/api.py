@@ -26,6 +26,7 @@ async def get_active() -> pl.DataFrame:
         f"{settings.corestack_api_url}/get_active_locations/",
         headers={"X-API-KEY": f"{settings.corestack_api_key.get_secret_value()}"},
     )
+    response.raise_for_status()
     _df = pl.read_json(response.content)
     return _df
 
@@ -123,22 +124,24 @@ def download_and_convert_geojson(
 
 
 async def convert_base(
-    input_path: str, output_path: str, chunk_size: int = 500000
+    input_path: str,
+    output_path: str,
+    chunk_size: int = 500000,
+    super_layer_source: str | None = None,
+    super_field: str | None = None,
 ) -> bool:
     """Asynchronously convert a base layer to Parquet format, sorted by Hilbert curve.
 
-    Reads any OGR-supported format (local file, S3 URI, HTTPS URL) using
-    DuckDB's ``ST_Read``, sorts rows spatially via ``ST_Hilbert`` so that
-    geographically nearby polygons are physically adjacent in the file, and
-    writes a compressed Parquet with a fixed row-group size.
-
-    Sorting at conversion time means all downstream joins and scans on the
-    base layer benefit from spatial locality without any extra work later.
+    If *super_layer_source* and *super_field* are provided, each base entity is also
+    assigned its containing super-layer region (e.g. sub-basin) via a
+    centroid-in-polygon spatial join, enabling downstream Hive partitioning.
 
     Args:
         input_path: Path or URI of the input file (local, ``s3://``, HTTPS).
         output_path: Destination path for the converted Parquet file.
         chunk_size: Unused; kept for API compatibility.
+        super_layer_source: Optional path/URI to the super-layer boundary file.
+        super_field: Column name in the super-layer file to copy onto each row.
 
     Returns:
         True if conversion succeeded, False otherwise.
@@ -152,16 +155,30 @@ async def convert_base(
     loop = asyncio.get_running_loop()
     with ThreadPoolExecutor() as pool:
         return await loop.run_in_executor(
-            pool, _convert_base_sync, input_path, output_path
+            pool, _convert_base_sync, input_path, output_path,
+            super_layer_source, super_field,
         )
 
 
-def _convert_base_sync(input_path: str, output_path: str) -> bool:
+def _convert_base_sync(
+    input_path: str,
+    output_path: str,
+    super_layer_source: str | None = None,
+    super_field: str | None = None,
+) -> bool:
     """Synchronously convert and Hilbert-sort a base layer using DuckDB.
 
-    Uses DuckDB's spatial extension to read any OGR-supported source
-    (including ``s3://`` URIs via the credential chain), sort rows by
-    ``ST_Hilbert(geom)``, and write a single Parquet file.
+    When *super_layer_source* and *super_field* are both provided the
+    conversion runs in **two steps**:
+
+    1. ``ST_Read`` the source → ``ORDER BY ST_Hilbert(geom)`` → local temp Parquet.
+    2. ``parquet_scan(tmp)`` LEFT JOIN super-layer on centroid-in-polygon →
+       final Parquet at *output_path* (may be an ``s3://`` URI).
+
+    The temp file is always deleted in the ``finally`` block.
+
+    When no super-layer is provided the function falls back to the original
+    single-step Hilbert-sort COPY.
 
     The geometry column is kept as ``geom`` (WKB binary) so that the
     existing pipeline rename ``geom -> geometry`` in ``run_mws_pipeline``
@@ -170,35 +187,86 @@ def _convert_base_sync(input_path: str, output_path: str) -> bool:
     Args:
         input_path: Path or URI of the input file.
         output_path: Destination path for the output Parquet file.
+        super_layer_source: Optional path/URI to the super-layer boundary file.
+        super_field: Column name in the super-layer whose value is copied to each row.
 
     Returns:
         True if conversion succeeded, False otherwise.
     """
-    logger.info(f"Starting Hilbert-sorted conversion: {input_path} -> {output_path}")
+    import tempfile
 
+    logger.info(f"Starting Hilbert-sorted conversion: {input_path} -> {output_path}")
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
+    tmp_path: str | None = None
     conn = init_duckdb()
     try:
-        sql = f"""
-            COPY (
-                SELECT
-                    * EXCLUDE (geom),
-                    ST_AsWKB(geom) AS geom
-                FROM ST_Read('{input_path}')
-                ORDER BY ST_Hilbert(geom)
-            )
-            TO '{output_path}'
-            WITH (
-                FORMAT 'PARQUET',
-                COMPRESSION 'ZSTD',
-                ROW_GROUP_SIZE 100000
-            );
-        """
-        logger.debug(f"Executing:\n{sql}")
-        conn.execute(sql)
+        if super_layer_source and super_field:
+            # ----------------------------------------------------------------
+            # Step 1: Hilbert-sort to a local temp parquet
+            # ----------------------------------------------------------------
+            tmp_fd, tmp_path = tempfile.mkstemp(suffix="_base_hilbert.parquet")
+            import os; os.close(tmp_fd)
 
-        logger.info(f"Hilbert-sorted base layer written to {output_path}")
+            logger.info(f"Step 1: Hilbert sort -> temp {tmp_path}")
+            conn.execute(f"""
+                COPY (
+                    SELECT
+                        * EXCLUDE (geom),
+                        ST_AsWKB(geom) AS geom
+                    FROM ST_Read('{input_path}')
+                    ORDER BY ST_Hilbert(geom)
+                )
+                TO '{tmp_path}'
+                WITH (FORMAT 'PARQUET', COMPRESSION 'ZSTD', ROW_GROUP_SIZE 100000);
+            """)
+
+            # ----------------------------------------------------------------
+            # Step 2: Spatial join with super layer → final output
+            # ----------------------------------------------------------------
+            logger.info(
+                f"Step 2: Spatial join with super layer "
+                f"({super_layer_source}) on field '{super_field}'"
+            )
+            conn.execute(f"""
+                CREATE TABLE _super AS
+                SELECT
+                    geom AS _poly,
+                    {super_field}
+                FROM ST_Read('{super_layer_source}');
+            """)
+            conn.execute(f"""
+                COPY (
+                    SELECT
+                        b.* EXCLUDE (_geom),
+                        s.{super_field}
+                    FROM (
+                        SELECT *, ST_GeomFromWKB(geom) AS _geom
+                        FROM parquet_scan('{tmp_path}')
+                    ) b
+                    LEFT JOIN _super s
+                        ON ST_Within(ST_Centroid(b._geom), s._poly)
+                )
+                TO '{output_path}'
+                WITH (FORMAT 'PARQUET', COMPRESSION 'ZSTD', ROW_GROUP_SIZE 100000);
+            """)
+        else:
+            # ----------------------------------------------------------------
+            # Single-step: Hilbert sort only (no super layer)
+            # ----------------------------------------------------------------
+            conn.execute(f"""
+                COPY (
+                    SELECT
+                        * EXCLUDE (geom),
+                        ST_AsWKB(geom) AS geom
+                    FROM ST_Read('{input_path}')
+                    ORDER BY ST_Hilbert(geom)
+                )
+                TO '{output_path}'
+                WITH (FORMAT 'PARQUET', COMPRESSION 'ZSTD', ROW_GROUP_SIZE 100000);
+            """)
+
+        logger.info(f"Base layer written to {output_path}")
         return True
 
     except Exception as exc:
@@ -209,8 +277,10 @@ def _convert_base_sync(input_path: str, output_path: str) -> bool:
 
     finally:
         conn.close()
+        if tmp_path:
+            with contextlib.suppress(Exception):
+                Path(tmp_path).unlink(missing_ok=True)
         import glob
-
         for f in glob.glob("/tmp/duckdb_*.db"):
             with contextlib.suppress(Exception):
                 Path(f).unlink()

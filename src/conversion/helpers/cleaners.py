@@ -8,9 +8,7 @@ import polars as pl
 # ---------------------------------------------------------------------------
 # Matches a column that ends with an ISO date (YYYY-MM-DD), with or without
 # a preceding underscore — e.g. "dg_deltag_2023-04-01" or "2023-04-01".
-_FORTNIGHTLY_DATE_RE = re.compile(
-    r"\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$"
-)
+_FORTNIGHTLY_DATE_RE = re.compile(r"\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$")
 # Matches a year-range (YYYY_YYYY / YYYY-YYYY) or a bare year anywhere in the
 # column name — e.g. "ci_kharif_2019_2020" or "te_slope_2023".
 _ANNUAL_YEAR_RE = re.compile(r"\d{4}[_-]\d{4}|\d{4}")
@@ -260,7 +258,12 @@ def unnest_json_cols(layer: pl.LazyFrame) -> pl.LazyFrame:
         The LazyFrame with unnested JSON attributes as separate columns.
     """
     schema = layer.collect_schema()
-    pattern = re.compile(r"^(.*?_)?(\d{4}(?:[-_]\d{2,4}){0,2})$")
+    # The prefix group *must* start with a letter so that a raw year token like
+    # "2017_" in "2017_2018" is never consumed as the prefix — only named
+    # prefixes such as "dw_" or "ci_" qualify as group(1).
+    pattern = re.compile(
+        r"^([a-zA-Z][a-zA-Z0-9]*(?:_[a-zA-Z][a-zA-Z0-9]*)*_)?(\d{4}(?:[-_]\d{2,4}){0,2})$"
+    )
 
     json_cols = [
         c for c, dtype in schema.items() if dtype == pl.String and pattern.match(c)

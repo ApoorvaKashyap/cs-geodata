@@ -9,11 +9,9 @@ import polars_st as st
 from loguru import logger
 
 from src.app.models import LayerConversionRequest
-from src.conversion.helpers.api import convert_base, get_active
+from src.conversion.helpers.api import convert_base
 from src.conversion.helpers.cleaners import (
     classify_columns,
-    clean_tehsils,
-    merge_col_metadata,
     prefix_cols,
     split_cols,
     unnest_json_cols,
@@ -44,6 +42,9 @@ _DATE_SUFFIX_RE = re.compile(r"(\d{4}-\d{2}-\d{2})$")
 # Regex used to extract the trailing year / year-range from an annual column name
 _YEAR_SUFFIX_RE = re.compile(r"(\d{4}[_-]\d{4}|\d{4})$")
 
+# Set to an integer to limit the number of tehsils for testing, or None for production.
+TEST_LIMIT_TEHSILS: int | None = None
+
 
 async def run_mws_pipeline(request: LayerConversionRequest) -> None:
     """Run the main MWS data pipeline to merge layers onto a base dataset.
@@ -67,11 +68,7 @@ async def run_mws_pipeline(request: LayerConversionRequest) -> None:
     logger.info(f"Using temp directory: {tmpdir}")
 
     logger.info(f"Fetching layer version CSV from {request.layer_version}")
-    version_meta = await _fetch_version(request.layer_version)
-
-    logger.info("Fetching active tehsils")
-    tehsils = clean_tehsils(await get_active())
-    tehsils = merge_col_metadata(version=version_meta, tehsils=tehsils)
+    tehsils = await _fetch_version(request.layer_version)
 
     # Filter tehsils to the requested version range
     logger.info(
@@ -82,13 +79,21 @@ async def run_mws_pipeline(request: LayerConversionRequest) -> None:
         & (pl.col("version") <= request.max_version)
     )
 
+    if TEST_LIMIT_TEHSILS is not None:
+        logger.warning(f"TESTING MODE: Limiting to {TEST_LIMIT_TEHSILS} tehsils.")
+        tehsils = tehsils.head(TEST_LIMIT_TEHSILS)
+
     logger.info("Fetching base layer")
     base_descriptor = request.base_layer_descriptor
     if base_descriptor.source is None:
         raise ValueError(
             f"Base layer '{base_descriptor.name}' has no 'source' path in the descriptor."
         )
-    base = await _fetch_base(base_descriptor.source)
+    base = await _fetch_base(
+        base_descriptor.source,
+        super_layer_source=request.super_layer_source,
+        super_field=request.super_field,
+    )
 
     # Build rename map from the TOML descriptor.
     # geom→geometry is always enforced as a standardisation step so that the
@@ -108,7 +113,7 @@ async def run_mws_pipeline(request: LayerConversionRequest) -> None:
     )
 
     logger.info("Processing layers")
-    layer_results = await _process_layer(request)
+    layer_results = await _process_layer(request, tehsils)
 
     logger.info("Post-processing and materializing layers")
     for layer in layer_results:
@@ -133,6 +138,19 @@ async def run_mws_pipeline(request: LayerConversionRequest) -> None:
         )
 
     logger.info("Merging all layers onto base")
+    if request.partition_by:
+        null_count = (
+            base.filter(pl.col(request.partition_by).is_null())
+            .collect(engine="streaming")
+            .height
+        )
+        if null_count > 0:
+            logger.warning(
+                f"Dropping {null_count} rows with null {request.partition_by} "
+                f"(out of coverage area)"
+            )
+            base = base.filter(pl.col(request.partition_by).is_not_null())
+
     merged = merge_all_layers(layer_results, base)
 
     # Sink merged frame to temp parquet to break the join plan
@@ -155,7 +173,10 @@ async def run_mws_pipeline(request: LayerConversionRequest) -> None:
         )
 
     logger.info(f"Writing split Parquet outputs to {request.output_path}")
-    await _write_split_parquets(merged, request.output_path)
+    all_cols = pl.scan_parquet(merged_path).collect_schema().names()
+    await _write_split_parquets(
+        merged_path, request.output_path, all_cols, request.partition_by
+    )
 
     # Cleanup temp files
     logger.info(f"Cleaning up temp directory: {tmpdir}")
@@ -171,23 +192,34 @@ async def run_mws_pipeline(request: LayerConversionRequest) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def _write_split_parquets(merged: pl.LazyFrame, output_path: str) -> None:
+async def _write_split_parquets(
+    merged_path: str,
+    output_path: str,
+    all_cols: list[str],
+    partition_by: str | None = None,
+) -> None:
     """Classify columns and write static, fortnightly, and annual Parquet files.
 
-    * **static.parquet** — flat GeoParquet (WKB geometry + GeoParquet 1.1.0
-      metadata) containing identity columns and non-temporal attributes.
-    * **fortnightly/year=YYYY/part-0.parquet** — melted long, one row per
-      ``(mws_id, date)``, no geometry column.
-    * **annual/year=YYYY/part-0.parquet** — melted long, one row per
-      ``(mws_id, year)``, no geometry column.
+    Reads from a local merged Parquet file and writes output via DuckDB's
+    native partitioned COPY, which handles Hive-style directory trees and
+    S3 writes natively without loading the full dataset into memory.
+
+    When *partition_by* is set (e.g. ``'sub_basin'``) every output is written
+    as a Hive-partitioned directory tree with that column as the outer level:
+
+    * ``static/{partition_by}={val}/part-0.parquet``
+    * ``fortnightly/{partition_by}={val}/year=YYYY/``
+    * ``annual/{partition_by}={val}/year=YYYY/``
 
     Args:
-        merged: The final merged lazy dataframe.
-        output_path: Target directory for all output files.
+        merged_path: Path to the local materialized merged Parquet file.
+        output_path: Target S3 or local directory for all output files.
+        all_cols: List of all column names in the merged frame.
+        partition_by: Optional outer Hive partition column name.
     """
-    all_cols = merged.collect_schema().names()
-    # Only include COMMON_COLS that actually exist in the frame
     keep_always = [c for c in COMMON_COLS if c in all_cols]
+    if partition_by and partition_by not in keep_always:
+        keep_always = keep_always + [partition_by]
     static_cols, fortnightly_cols, annual_cols = classify_columns(all_cols, keep_always)
 
     logger.info(
@@ -195,273 +227,233 @@ async def _write_split_parquets(merged: pl.LazyFrame, output_path: str) -> None:
         f"fortnightly: {len(fortnightly_cols)}, annual: {len(annual_cols)}"
     )
 
-    # ---- static GeoParquet ------------------------------------------------
-    static_path = f"{output_path}/static.parquet"
-    logger.info(f"Writing static GeoParquet → {static_path}")
-    await _write_static_geoparquet(merged.select(static_cols), static_path)
-
-    # ---- fortnightly -------------------------------------------------------
-    if fortnightly_cols:
-        non_geo_keep = [c for c in keep_always if c != "geometry"]
-        fortnightly_df = _melt_fortnightly(merged, fortnightly_cols, non_geo_keep)
-        fortnightly_base = f"{output_path}/fortnightly"
-        logger.info(f"Writing fortnightly parquet → {fortnightly_base}/year=*/part-0.parquet")
-        _write_temporal_parquet(fortnightly_df, fortnightly_base)
-    else:
-        logger.info("No fortnightly columns detected — skipping fortnightly output")
-
-    # ---- annual ------------------------------------------------------------
-    if annual_cols:
-        non_geo_keep = [c for c in keep_always if c != "geometry"]
-        annual_df = _melt_annual(merged, annual_cols, non_geo_keep)
-        annual_base = f"{output_path}/annual"
-        logger.info(f"Writing annual parquet → {annual_base}/year=*/part-0.parquet")
-        _write_temporal_parquet(annual_df, annual_base)
-    else:
-        logger.info("No annual columns detected — skipping annual output")
-
-
-async def _write_static_geoparquet(df: pl.LazyFrame, file_path: str) -> None:
-    """Write the static columns as a flat GeoParquet file with spec 1.1.0 metadata.
-
-    Computes the global bounding box, writes a single Parquet file via DuckDB
-    (which injects native geometry and bbox struct columns), then overrides the
-    per-file bbox with the global bounds.
-
-    Args:
-        df: LazyFrame containing at minimum a WKB ``geometry`` column.
-        file_path: Destination path for the output file.
-    """
-    # Compute global bounds
-    logger.info("Computing global geometry bounds for static parquet")
-    bounds_df = df.select(
-        st.geom("geometry").st.bounds().alias("bounds")  # type: ignore[attr-defined]
-    ).collect(engine="streaming")
-
-    global_bbox: list[float] = [
-        float(bounds_df["bounds"].arr.get(0).min()),  # xmin
-        float(bounds_df["bounds"].arr.get(1).min()),  # ymin
-        float(bounds_df["bounds"].arr.get(2).max()),  # xmax
-        float(bounds_df["bounds"].arr.get(3).max()),  # ymax
-    ]
-    logger.info(f"Global bounds: {global_bbox}")
-
-    Path(file_path).parent.mkdir(parents=True, exist_ok=True)
-
     conn = init_duckdb()
     try:
-        df_collected = df.collect(engine="streaming")
-        arrow_table = df_collected.to_arrow()
-        conn.register("static_table", arrow_table)
+        conn.execute(
+            f"CREATE TABLE merged AS SELECT * FROM read_parquet('{merged_path}')"
+        )
 
-        sql = f"""
-            COPY (
-                SELECT
-                    * EXCLUDE (geometry),
-                    ST_SetCRS(ST_GeomFromWKB(geometry), 'EPSG:4326') AS geometry,
-                    struct_pack(
-                        xmin := ST_XMin(ST_GeomFromWKB(geometry)),
-                        ymin := ST_YMin(ST_GeomFromWKB(geometry)),
-                        xmax := ST_XMax(ST_GeomFromWKB(geometry)),
-                        ymax := ST_YMax(ST_GeomFromWKB(geometry))
-                    ) AS bbox
-                FROM static_table
+        # ---- static GeoParquet ------------------------------------------------
+        logger.info(f"Writing static GeoParquet → {output_path}/static/")
+        await _write_static_geoparquet_duckdb(
+            conn, static_cols, f"{output_path}/static", partition_by
+        )
+
+        # ---- fortnightly -------------------------------------------------------
+        if fortnightly_cols:
+            non_geo_keep = [c for c in keep_always if c != "geometry"]
+            logger.info(f"Writing fortnightly parquet → {output_path}/fortnightly/")
+            _write_temporal_parquet_duckdb(
+                conn,
+                "fortnightly",
+                fortnightly_cols,
+                non_geo_keep,
+                f"{output_path}/fortnightly",
+                partition_by,
             )
-            TO '{file_path}'
-            WITH (
-                FORMAT 'PARQUET',
-                ROW_GROUP_SIZE 100000,
-                COMPRESSION 'ZSTD'
-            );
-        """
-        logger.debug(f"Executing SQL:\n{sql}")
-        conn.execute(sql)
-        conn.unregister("static_table")
+        else:
+            logger.info("No fortnightly columns detected — skipping fortnightly output")
 
-        _fix_geoparquet_metadata(file_path, global_bbox)
-        logger.info(f"Static GeoParquet written to {file_path}")
+        # ---- annual ------------------------------------------------------------
+        if annual_cols:
+            non_geo_keep = [c for c in keep_always if c != "geometry"]
+            logger.info(f"Writing annual parquet → {output_path}/annual/")
+            _write_temporal_parquet_duckdb(
+                conn,
+                "annual",
+                annual_cols,
+                non_geo_keep,
+                f"{output_path}/annual",
+                partition_by,
+            )
+        else:
+            logger.info("No annual columns detected — skipping annual output")
 
     finally:
         conn.close()
-        import glob
-
-        for f in glob.glob("/tmp/duckdb_*.db"):
-            with contextlib.suppress(Exception):
-                Path(f).unlink()
 
 
-def _write_temporal_parquet(df: pl.LazyFrame, base_path: str) -> None:
-    """Write a melted temporal dataframe partitioned by year.
+async def _write_static_geoparquet_duckdb(
+    conn,
+    static_cols: list[str],
+    dir_path: str,
+    partition_by: str | None = None,
+) -> None:
+    """Write the static columns as GeoParquet file(s) via DuckDB.
 
-    Each year gets its own subdirectory ``year=YYYY/part-0.parquet``.
+    Adds a bbox struct column alongside the native geometry column so that
+    readers can use it for spatial filtering. Writes directly to S3 or local
+    filesystem using DuckDB's COPY statement with optional PARTITION BY.
 
     Args:
-        df: LazyFrame with a ``year`` column (integer).
-        base_path: Root directory for the partitioned output.
+        conn: An open DuckDB connection with a 'merged' table registered.
+        static_cols: List of column names to include in the static output.
+        dir_path: Destination directory path (S3 or local).
+        partition_by: Optional Hive partition column.
     """
-    years = df.select("year").unique().collect()["year"].to_list()
-    logger.info(f"Writing {len(years)} year partitions to {base_path}")
+    # Build the SELECT — geometry needs special treatment to add bbox
+    geo_exprs = [
+        "* EXCLUDE (geometry)",
+        "ST_SetCRS(ST_GeomFromWKB(geometry), 'EPSG:4326') AS geometry",
+        "struct_pack("
+        "    xmin := ST_XMin(ST_GeomFromWKB(geometry)),"
+        "    ymin := ST_YMin(ST_GeomFromWKB(geometry)),"
+        "    xmax := ST_XMax(ST_GeomFromWKB(geometry)),"
+        "    ymax := ST_YMax(ST_GeomFromWKB(geometry))"
+        ") AS bbox",
+    ]
+    col_select = ", ".join(f'"{c}"' for c in static_cols if c != "geometry")
+    if not col_select:
+        col_select = "*"
 
-    for year in sorted(years):
-        year_df = df.filter(pl.col("year") == year).drop("year")
-        year_path = Path(f"{base_path}/year={year}")
-        year_path.mkdir(parents=True, exist_ok=True)
-        out_file = str(year_path / "part-0.parquet")
-        year_df.sink_parquet(out_file, compression="zstd", compression_level=15)
-        logger.info(f"  Written year={year} → {out_file}")
+    partition_clause = f"PARTITION_BY ({partition_by})" if partition_by else ""
+
+    sql = f"""
+        COPY (
+            SELECT
+                {col_select.rstrip(", ")},
+                ST_SetCRS(ST_GeomFromWKB(geometry), 'EPSG:4326') AS geometry,
+                struct_pack(
+                    xmin := ST_XMin(ST_GeomFromWKB(geometry)),
+                    ymin := ST_YMin(ST_GeomFromWKB(geometry)),
+                    xmax := ST_XMax(ST_GeomFromWKB(geometry)),
+                    ymax := ST_YMax(ST_GeomFromWKB(geometry))
+                ) AS bbox
+            FROM merged
+        )
+        TO '{dir_path}'
+        WITH (
+            FORMAT 'PARQUET',
+            ROW_GROUP_SIZE 100000,
+            COMPRESSION 'ZSTD',
+            OVERWRITE_OR_IGNORE true
+            {(", PARTITION_BY (" + partition_by + ")") if partition_by else ""}
+        );
+    """
+    logger.debug(f"Static COPY SQL:\n{sql}")
+    conn.execute(sql)
+    logger.info(f"Static GeoParquet written to {dir_path}")
 
 
-# ---------------------------------------------------------------------------
-# Melt helpers
-# ---------------------------------------------------------------------------
-
-
-def _melt_fortnightly(
-    df: pl.LazyFrame,
-    fortnightly_cols: list[str],
+def _write_temporal_parquet_duckdb(
+    conn,
+    kind: str,
+    temporal_cols: list[str],
     keep_cols: list[str],
-) -> pl.LazyFrame:
-    """Melt fortnightly columns into a long frame with a ``date`` column.
+    base_path: str,
+    partition_by: str | None = None,
+) -> None:
+    """Write melted temporal (fortnightly or annual) output via DuckDB COPY.
 
-    Each unique ISO date found in the column names becomes one row per mws_id.
-    Variable names are derived by stripping the trailing ``_YYYY-MM-DD`` suffix.
-
-    Schema: ``[keep_cols..., date (pl.Date), year (pl.Int32), <variables...>]``
+    Groups columns by their date/year suffix, constructs a UNION ALL query that
+    emits one row per (mws_id, date/year) and writes directly to partitioned
+    Parquet files using DuckDB's native COPY statement.
 
     Args:
-        df: The merged lazy frame containing fortnightly columns.
-        fortnightly_cols: Column names that contain a trailing ISO date.
-        keep_cols: Identity columns to carry forward (e.g. mws_id, tehsil …).
+        conn: An open DuckDB connection with a 'merged' table registered.
+        kind: Either ``'fortnightly'`` or ``'annual'``.
+        temporal_cols: The list of wide temporal column names to melt.
+        keep_cols: Identity columns to carry forward in each output row.
+        base_path: Root output directory (S3 or local).
+        partition_by: Optional outer Hive partition column.
+    """
+    if kind == "fortnightly":
+        groups = _group_fortnightly_cols(temporal_cols)
+    else:
+        groups = _group_annual_cols(temporal_cols)
+
+    if not groups:
+        logger.warning(f"No {kind} groups found — skipping")
+        return
+
+    keep_select = ", ".join(f'"{c}"' for c in keep_cols)
+
+    # Collect the complete set of variable names across all time groups so that
+    # every UNION ALL branch has the same column count (missing vars → NULL).
+    all_vars: list[str] = []
+    for var_map in groups.values():
+        for var in var_map:
+            if var not in all_vars:
+                all_vars.append(var)
+
+    union_parts: list[str] = []
+
+    for time_val, var_map in groups.items():
+        var_select = ", ".join(
+            f'"{var_map[var]}" AS "{var}"' if var in var_map else f'NULL AS "{var}"'
+            for var in all_vars
+        )
+        if kind == "fortnightly":
+            time_expr = f"DATE '{time_val}' AS date, {int(time_val[:4])} AS year"
+        else:
+            first_year = _FIRST_YEAR_RE.search(time_val)
+            year_val = int(first_year.group()) if first_year else 0
+            time_expr = f"{year_val} AS year"
+
+        union_parts.append(
+            f"SELECT {keep_select}, {time_expr}, {var_select} FROM merged"
+        )
+
+    full_query = " UNION ALL ".join(union_parts)
+
+    partition_cols = []
+    if partition_by:
+        partition_cols.append(partition_by)
+    partition_cols.append("year")
+    partition_clause = f"PARTITION_BY ({', '.join(partition_cols)})"
+
+    sql = f"""
+        COPY (
+            {full_query}
+        )
+        TO '{base_path}'
+        WITH (
+            FORMAT 'PARQUET',
+            ROW_GROUP_SIZE 100000,
+            COMPRESSION 'ZSTD',
+            OVERWRITE_OR_IGNORE true,
+            {partition_clause}
+        );
+    """
+    logger.debug(f"{kind} COPY SQL (first 500 chars): {sql[:500]}")
+    conn.execute(sql)
+    logger.info(f"{kind.capitalize()} output written to {base_path}")
+
+
+def _group_fortnightly_cols(cols: list[str]) -> dict[str, dict[str, str]]:
+    """Group fortnightly column names by their ISO date suffix.
 
     Returns:
-        Long LazyFrame with one row per (mws_id, date).
+        ``{date_str -> {var_name -> orig_col_name}}``
     """
-    # Group fortnightly cols by their date suffix
-    # date_groups: {date_str -> {var_name -> orig_col_name}}
-    date_groups: dict[str, dict[str, str]] = {}
-    for col in fortnightly_cols:
+    groups: dict[str, dict[str, str]] = {}
+    for col in cols:
         m = _DATE_SUFFIX_RE.search(col)
         if not m:
             continue
         date_str = m.group(1)
-        # Strip trailing _YYYY-MM-DD to get variable name
         prefix = col[: -(len(date_str) + 1)] if col.endswith("_" + date_str) else col
-        date_groups.setdefault(date_str, {})[prefix] = col
-
-    frames: list[pl.LazyFrame] = []
-    for date_str, var_map in date_groups.items():
-        year = int(date_str[:4])
-        sel = [pl.col(c) for c in keep_cols] + [
-            pl.col(orig).alias(var) for var, orig in var_map.items()
-        ]
-        frames.append(
-            df.select(sel)
-            .with_columns(
-                pl.lit(date_str).str.to_date().alias("date"),
-                pl.lit(year).cast(pl.Int32).alias("year"),
-            )
-        )
-
-    if not frames:
-        logger.warning("No fortnightly date groups found — returning empty frame")
-        return pl.LazyFrame()
-
-    return pl.concat(frames, how="diagonal_relaxed")
+        groups.setdefault(date_str, {})[prefix] = col
+    return groups
 
 
-def _melt_annual(
-    df: pl.LazyFrame,
-    annual_cols: list[str],
-    keep_cols: list[str],
-) -> pl.LazyFrame:
-    """Melt annual columns into a long frame with a ``year`` column.
-
-    Columns are grouped by their trailing year / year-range suffix
-    (e.g. ``2019_2020`` or ``2023``). The ``year`` column value is the first
-    four-digit year found in that suffix.
-
-    Schema: ``[keep_cols..., year (pl.Int32), <variables...>]``
-
-    Args:
-        df: The merged lazy frame containing annual columns.
-        annual_cols: Column names that contain a year / year-range.
-        keep_cols: Identity columns to carry forward (e.g. mws_id, tehsil …).
+def _group_annual_cols(cols: list[str]) -> dict[str, dict[str, str]]:
+    """Group annual column names by their year / year-range suffix.
 
     Returns:
-        Long LazyFrame with one row per (mws_id, year).
+        ``{year_suffix -> {var_name -> orig_col_name}}``
     """
-    # Group annual cols by their year/year-range suffix
-    # year_groups: {year_suffix -> {var_name -> orig_col_name}}
-    year_groups: dict[str, dict[str, str]] = {}
-    for col in annual_cols:
+    groups: dict[str, dict[str, str]] = {}
+    for col in cols:
         m = _YEAR_SUFFIX_RE.search(col)
         if not m:
             continue
         year_suffix = m.group(1)
-        # Strip trailing _<suffix> to get variable name
-        prefix = col[: -(len(year_suffix) + 1)] if col.endswith("_" + year_suffix) else col
-        year_groups.setdefault(year_suffix, {})[prefix] = col
-
-    frames: list[pl.LazyFrame] = []
-    for year_suffix, var_map in year_groups.items():
-        first_year_m = _FIRST_YEAR_RE.search(year_suffix)
-        first_year = int(first_year_m.group()) if first_year_m else 0
-        sel = [pl.col(c) for c in keep_cols] + [
-            pl.col(orig).alias(var) for var, orig in var_map.items()
-        ]
-        frames.append(
-            df.select(sel)
-            .with_columns(pl.lit(first_year).cast(pl.Int32).alias("year"))
+        prefix = (
+            col[: -(len(year_suffix) + 1)] if col.endswith("_" + year_suffix) else col
         )
-
-    if not frames:
-        logger.warning("No annual year groups found — returning empty frame")
-        return pl.LazyFrame()
-
-    return pl.concat(frames, how="diagonal_relaxed")
-
-
-# ---------------------------------------------------------------------------
-# GeoParquet metadata fix (kept for static output)
-# ---------------------------------------------------------------------------
-
-
-def _fix_geoparquet_metadata(file_path: str, global_bbox: list[float]) -> None:
-    """Override the per-file bbox in GeoParquet metadata with the global bbox.
-
-    Upgrades spec version to 1.1.0 and sets the ``covering`` field so that
-    readers can use the bbox struct column for spatial filtering.
-
-    Args:
-        file_path: Path to the written Parquet file.
-        global_bbox: Bounding box [xmin, ymin, xmax, ymax] covering all data.
-    """
-    import json as _json
-
-    import pyarrow.parquet as pq  # type: ignore[import-untyped]
-
-    table = pq.read_table(file_path)
-
-    existing_meta = table.schema.metadata or {}
-    decoded = {k.decode(): v.decode() for k, v in existing_meta.items()}
-
-    geo = _json.loads(decoded.get("geo", "{}"))
-
-    geo["version"] = "1.1.0"
-    geo["columns"]["geometry"]["bbox"] = global_bbox
-    geo["columns"]["geometry"]["covering"] = {
-        "bbox": {
-            "xmin": ["bbox", "xmin"],
-            "ymin": ["bbox", "ymin"],
-            "xmax": ["bbox", "xmax"],
-            "ymax": ["bbox", "ymax"],
-        }
-    }
-
-    decoded["geo"] = _json.dumps(geo)
-
-    updated_table = table.replace_schema_metadata(decoded)
-    pq.write_table(updated_table, file_path, compression="zstd")
+        groups.setdefault(year_suffix, {})[prefix] = col
+    return groups
 
 
 # ---------------------------------------------------------------------------
@@ -471,6 +463,7 @@ def _fix_geoparquet_metadata(file_path: str, global_bbox: list[float]) -> None:
 
 async def _process_layer(
     request: LayerConversionRequest,
+    tehsils: pl.LazyFrame,
 ) -> dict[str, pl.LazyFrame]:
     """Dispatch per-tehsil download-and-convert worker tasks, then lazily scan results.
 
@@ -493,7 +486,7 @@ async def _process_layer(
     """
     results: dict[str, pl.LazyFrame] = {}
 
-    work = await get_all_geojsons(request.attribute_layers)
+    work = await get_all_geojsons(request.attribute_layers, tehsils)
 
     while True:
         completed = await poll_completion(work)
@@ -510,10 +503,9 @@ async def _process_layer(
                 f"No Parquet files found for layer '{layer}' — "
                 "all worker tasks may have failed."
             )
-        logger.info(
-            f"Scanning {len(matching)} Parquet file(s) for layer '{layer}'"
-        )
-        results[layer] = pl.scan_parquet(parquet_glob)
+        logger.info(f"Scanning {len(matching)} Parquet file(s) for layer '{layer}'")
+        lazy_frames = [pl.scan_parquet(p) for p in matching]
+        results[layer] = pl.concat(lazy_frames, how="diagonal_relaxed")
 
     return results
 
@@ -528,14 +520,35 @@ async def _fetch_version(s3_path: str) -> pl.LazyFrame:
         A lazy dataframe containing the version metadata sorted by state.
     """
     df = pl.read_csv(s3_path)
-    return df.sort("State").lazy()
+    return (
+        df.rename(
+            {
+                "State": "state_name",
+                "District": "district_name",
+                "Tehsil": "tehsil_name",
+                "Layer Version": "version",
+            }
+        )
+        .sort("state_name")
+        .lazy()
+    )
 
 
-async def _fetch_base(base_layer: str) -> pl.LazyFrame:
+async def _fetch_base(
+    base_layer: str,
+    super_layer_source: str | None = None,
+    super_field: str | None = None,
+) -> pl.LazyFrame:
     """Fetch the base MWS layer, converting it to Parquet if needed.
+
+    When *super_layer_source* and *super_field* are provided, a
+    centroid-in-polygon spatial join is also performed during conversion
+    to assign the super-layer field to every base entity row.
 
     Args:
         base_layer: Path or URI to the base layer.
+        super_layer_source: Optional super-layer boundary file path/URI.
+        super_field: Column name in the super-layer to copy onto each row.
 
     Returns:
         A lazy dataframe of the base layer.
@@ -551,7 +564,12 @@ async def _fetch_base(base_layer: str) -> pl.LazyFrame:
         logger.warning(f"Failed to scan {base_layer}, attempting conversion...")
 
     converted_path = str(Path(base_layer).with_suffix(".converted.parquet"))
-    success = await convert_base(base_layer, converted_path)
+    success = await convert_base(
+        base_layer,
+        converted_path,
+        super_layer_source=super_layer_source,
+        super_field=super_field,
+    )
 
     if not success:
         raise ValueError(f"Failed to convert base layer: {base_layer}")

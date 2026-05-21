@@ -31,7 +31,7 @@ def merge_all_layers(
     """
     # Validate base has expected columns
     base_schema = base.collect_schema().names()
-    for col in ["mws_id", "geometry", "area_in_ha", "version"]:
+    for col in ["mws_id", "geometry", "area_in_ha"]:
         if col not in base_schema:
             raise ValueError(f"Base layer missing expected column: '{col}'")
 
@@ -56,7 +56,19 @@ def merge_all_layers(
 
         # Deduplicate on mws_id alone — polygons spanning multiple tehsils
         # appear in multiple GeoJSON files.
-        layer_df = layer_df.unique(subset=["mws_id"])
+        # Prefer non-null values when duplicates exist
+        layer_df = (
+            layer_df.sort(by="mws_id")
+            .group_by("mws_id")
+            .agg(pl.all().drop_nulls().first())
+        )
+
+        # Validate mws_id exists before joining
+        if "mws_id" not in layer_df.collect_schema().names():
+            raise ValueError(
+                f"Layer '{layer_name}' missing 'mws_id' column after processing. "
+                f"Check descriptor rename mapping. Available columns: {layer_df.collect_schema().names()}"
+            )
 
         merged = merged.join(
             layer_df,
@@ -113,18 +125,15 @@ def _extract_location_meta(
         layer_df = layer_results[layer_name]
         schema = layer_df.collect_schema().names()
 
-        if all(
-            c in schema for c in ["mws_id", "tehsil", "district", "state"]
-        ):
+        if all(c in schema for c in ["mws_id", "tehsil", "district", "state"]):
             logger.info(f"Using '{layer_name}' as location metadata source")
-            meta = layer_df.select(
-                ["mws_id", "tehsil", "district", "state"]
-            ).unique(subset=["mws_id"])
+            meta = layer_df.select(["mws_id", "tehsil", "district", "state"]).unique(
+                subset=["mws_id"]
+            )
 
             count = meta.collect(engine="streaming").height
             logger.info(
-                f"Location metadata: {count} unique mws_id pairs "
-                f"from '{layer_name}'"
+                f"Location metadata: {count} unique mws_id pairs from '{layer_name}'"
             )
             return meta
 

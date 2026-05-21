@@ -3,8 +3,8 @@ from loguru import logger
 from rq.job import Job
 
 from src.app.models import LayerDescriptor
-from src.conversion.helpers.api import download_and_convert_geojson, get_active
-from src.conversion.helpers.cleaners import clean_label, clean_tehsils
+from src.conversion.helpers.api import download_and_convert_geojson
+from src.conversion.helpers.cleaners import clean_label
 from src.work.work_queue import get_status, mq
 
 
@@ -40,22 +40,27 @@ async def _create_tehsil_map(
             descriptor.url_template,
             descriptor.rename,
             descriptor.drop,
+            job_timeout=3600,
         )
         tmap[f"{descriptor.name}_{district_slug}_{tehsil_slug}"] = task
 
     return tmap
 
 
-async def get_all_geojsons(attribute_layers: list[LayerDescriptor]) -> dict:
+async def get_all_geojsons(
+    attribute_layers: list[LayerDescriptor],
+    tehsils: pl.LazyFrame,
+) -> dict:
     """Queue download-and-convert tasks for all WFS collection layers.
 
     Args:
         attribute_layers: List of non-base LayerDescriptors (type='collection').
+        tehsils: The filtered active tehsils to process.
 
     Returns:
         A dictionary mapping layer names to their corresponding tehsil task maps.
     """
-    tehsils_t = clean_tehsils(await get_active()).collect(engine="streaming")
+    tehsils_t = tehsils.collect(engine="streaming")
     all_geojsons: dict = {}
 
     for descriptor in attribute_layers:

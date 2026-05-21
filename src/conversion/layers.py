@@ -8,7 +8,7 @@ from src.work.work_queue import bq, lq
 
 def handle_layers(request: ConversionRequest) -> dict:
     logger.info(f"Enqueueing conversion job for descriptor={request.descriptor_url}")
-    tid = lq.enqueue(layer_conversion, request)
+    tid = lq.enqueue(layer_conversion, request, job_timeout=86400)
     return {
         "task_id": tid.id,
         "status": tid.get_status().name,
@@ -32,7 +32,9 @@ def layer_conversion(request: ConversionRequest) -> None:
         f"layers={[d.name for d in full_request.attribute_layers]}"
     )
     try:
-        output = run_mws_pipeline(full_request)
+        import asyncio
+
+        output = asyncio.run(run_mws_pipeline(full_request))
         logger.info(f"Layer conversion complete -> {output}")
     except Exception as e:
         logger.error(f"Layer conversion failed: {e}")
@@ -43,14 +45,16 @@ def base_layer_cache(request: BaseLayers) -> dict[str, str]:
     logger.info(f"Starting base layer cache for {request}")
     from rq.job import Job
 
-    bid: Job = Job()
     try:
-        for i in request.layers:
-            match i:
-                case "mws":
-                    bid = bq.enqueue(convert_base, "mws", request.layers[i])
-                case _:
-                    raise ValueError(f"Unknown base layer request: {request}")
+        bid: Job = bq.enqueue(
+            convert_base,
+            request.base_layer_source,
+            request.output_path,
+            chunk_size=500000,
+            super_layer_source=request.super_layer_source,
+            super_field=request.super_field,
+            job_timeout=86400,
+        )
         return {
             "task_id": bid.id,
             "status": bid.get_status().name,
