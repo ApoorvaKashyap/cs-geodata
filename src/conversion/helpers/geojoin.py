@@ -26,8 +26,10 @@ def fill_missing_admin_boundaries(
     """
     logger.info("Loading tehsil boundaries")
 
-    has_admin = merged.filter(pl.col("state").is_not_null())
-    needs_admin = merged.filter(pl.col("state").is_null())
+    # Treat both nulls and empty/whitespace strings as missing admin data
+    is_missing = pl.col("state").is_null() | (pl.col("state").cast(pl.String).str.strip_chars() == "")
+    has_admin = merged.filter(~is_missing)
+    needs_admin = merged.filter(is_missing)
 
     # Only collect the columns needed for the spatial join (lightweight)
     join_keys = needs_admin.select(["mws_id", "geometry"]).collect(

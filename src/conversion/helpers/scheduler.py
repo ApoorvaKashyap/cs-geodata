@@ -27,6 +27,7 @@ async def _create_tehsil_map(
     tmap: dict[str, Job] = {}
 
     for row in tehsils_t.to_dicts():
+        state_slug = clean_label(row["state_name"])
         district_slug = clean_label(row["district_name"])
         tehsil_slug = clean_label(row["tehsil_name"])
         task = mq.enqueue(
@@ -42,8 +43,12 @@ async def _create_tehsil_map(
             descriptor.drop,
             job_timeout=3600,
         )
-        tmap[f"{descriptor.name}_{district_slug}_{tehsil_slug}"] = task
+        tmap[f"{descriptor.name}_{state_slug}_{district_slug}_{tehsil_slug}"] = task
 
+    logger.info(
+        f"Enqueued {len(tmap)} jobs for layer '{descriptor.name}' "
+        f"({tehsils_t.height} tehsils in input)"
+    )
     return tmap
 
 

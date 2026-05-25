@@ -35,6 +35,7 @@ def init_duckdb() -> DuckDBPyConnection:
                 PROVIDER credential_chain
             );""")
         conn.execute(f"SET memory_limit = '{settings.duckdb_memory_limit}'")
+        conn.execute(f"SET threads = {settings.duckdb_threads}")
 
         return conn
     except Exception as e:

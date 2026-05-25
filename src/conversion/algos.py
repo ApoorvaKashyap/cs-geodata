@@ -4,6 +4,7 @@ import json
 import re
 from pathlib import Path
 
+import pyarrow.parquet as pq
 import polars as pl
 import polars_st as st
 from loguru import logger
@@ -38,12 +39,9 @@ COMMON_COLS = [
 # Regex used to extract the leading four-digit year from a year suffix
 _FIRST_YEAR_RE = re.compile(r"\d{4}")
 # Regex used to extract the trailing ISO date from a fortnightly column name
-_DATE_SUFFIX_RE = re.compile(r"(\d{4}-\d{2}-\d{2})$")
+_DATE_SUFFIX_RE = re.compile(r"(\d{1,4}-\d{1,2}-\d{1,4})$")
 # Regex used to extract the trailing year / year-range from an annual column name
 _YEAR_SUFFIX_RE = re.compile(r"(\d{4}[_-]\d{4}|\d{4})$")
-
-# Set to an integer to limit the number of tehsils for testing, or None for production.
-TEST_LIMIT_TEHSILS: int | None = None
 
 
 async def run_mws_pipeline(request: LayerConversionRequest) -> None:
@@ -78,10 +76,14 @@ async def run_mws_pipeline(request: LayerConversionRequest) -> None:
         (pl.col("version") >= request.min_version)
         & (pl.col("version") <= request.max_version)
     )
-
-    if TEST_LIMIT_TEHSILS is not None:
-        logger.warning(f"TESTING MODE: Limiting to {TEST_LIMIT_TEHSILS} tehsils.")
-        tehsils = tehsils.head(TEST_LIMIT_TEHSILS)
+    logger.debug(
+        f"List of Filtered Tehsils: {tehsils.collect(engine='streaming')['tehsil_name'].to_list()}"
+    )
+    if settings.test_limit_tehsils is not None:
+        logger.warning(
+            f"TESTING MODE: Limiting to {settings.test_limit_tehsils} tehsils."
+        )
+        tehsils = tehsils.head(settings.test_limit_tehsils)
 
     logger.info("Fetching base layer")
     base_descriptor = request.base_layer_descriptor
@@ -123,7 +125,12 @@ async def run_mws_pipeline(request: LayerConversionRequest) -> None:
 
         layer_path = f"{tmpdir}/{layer}.parquet"
         logger.info(f"Sinking layer '{layer}' to {layer_path}")
-        layer_results[layer].sink_parquet(layer_path, compression="zstd")
+        layer_results[layer].sink_parquet(
+            layer_path,
+            compression="zstd",
+            compression_level=settings.parquet_compression_level,
+            row_group_size=settings.parquet_row_group_size,
+        )
         layer_results[layer] = pl.scan_parquet(layer_path)
         logger.info(f"Layer '{layer}' materialized")
 
@@ -158,7 +165,12 @@ async def run_mws_pipeline(request: LayerConversionRequest) -> None:
     logger.info(f"Sinking merged frame to {merged_path}")
     merged.with_columns(
         st.geom("geometry").st.to_wkb().alias("geometry")  # type: ignore[attr-defined]
-    ).sink_parquet(merged_path, compression="zstd", row_group_size=100_000)
+    ).sink_parquet(
+        merged_path,
+        compression="zstd",
+        compression_level=settings.parquet_compression_level,
+        row_group_size=settings.parquet_row_group_size,
+    )
     logger.info("Merged frame materialized")
 
     # Reload as lazy for admin boundary fill
@@ -227,6 +239,11 @@ async def _write_split_parquets(
         f"fortnightly: {len(fortnightly_cols)}, annual: {len(annual_cols)}"
     )
 
+    if not output_path.startswith("s3://"):
+        import os
+
+        os.makedirs(output_path, exist_ok=True)
+
     conn = init_duckdb()
     try:
         conn.execute(
@@ -242,9 +259,9 @@ async def _write_split_parquets(
         # ---- fortnightly -------------------------------------------------------
         if fortnightly_cols:
             non_geo_keep = [c for c in keep_always if c != "geometry"]
-            logger.info(f"Writing fortnightly parquet → {output_path}/fortnightly/")
-            _write_temporal_parquet_duckdb(
-                conn,
+            logger.info(f"Writing fortnightly parquet → {output_path}/fortnightly")
+            _write_temporal_parquet_polars(
+                merged_path,
                 "fortnightly",
                 fortnightly_cols,
                 non_geo_keep,
@@ -257,9 +274,9 @@ async def _write_split_parquets(
         # ---- annual ------------------------------------------------------------
         if annual_cols:
             non_geo_keep = [c for c in keep_always if c != "geometry"]
-            logger.info(f"Writing annual parquet → {output_path}/annual/")
-            _write_temporal_parquet_duckdb(
-                conn,
+            logger.info(f"Writing annual parquet → {output_path}/annual")
+            _write_temporal_parquet_polars(
+                merged_path,
                 "annual",
                 annual_cols,
                 non_geo_keep,
@@ -282,31 +299,45 @@ async def _write_static_geoparquet_duckdb(
     """Write the static columns as GeoParquet file(s) via DuckDB.
 
     Adds a bbox struct column alongside the native geometry column so that
-    readers can use it for spatial filtering. Writes directly to S3 or local
-    filesystem using DuckDB's COPY statement with optional PARTITION BY.
+    readers can use it for spatial filtering.
+
+    For **local** paths DuckDB writes directly to *dir_path*, then every
+    output ``.parquet`` file is patched in-place to upgrade the GeoParquet
+    ``geo`` metadata from 1.0.0 → 1.1.0 and inject the ``covering.bbox``
+    entry.
+
+    For **S3** paths the write-patch-upload workflow is used:
+
+    1. DuckDB writes to a local temporary directory (preserving any Hive
+       partition subdirectory structure).
+    2. Every file is patched locally with :func:`_patch_geoparquet_metadata`.
+    3. The patched files are uploaded to *dir_path* on S3 via ``s3fs``,
+       preserving the relative path layout.
+    4. The temporary directory is deleted.
 
     Args:
         conn: An open DuckDB connection with a 'merged' table registered.
         static_cols: List of column names to include in the static output.
-        dir_path: Destination directory path (S3 or local).
+        dir_path: Destination directory path (S3 ``s3://`` or local).
         partition_by: Optional Hive partition column.
     """
-    # Build the SELECT — geometry needs special treatment to add bbox
-    geo_exprs = [
-        "* EXCLUDE (geometry)",
-        "ST_SetCRS(ST_GeomFromWKB(geometry), 'EPSG:4326') AS geometry",
-        "struct_pack("
-        "    xmin := ST_XMin(ST_GeomFromWKB(geometry)),"
-        "    ymin := ST_YMin(ST_GeomFromWKB(geometry)),"
-        "    xmax := ST_XMax(ST_GeomFromWKB(geometry)),"
-        "    ymax := ST_YMax(ST_GeomFromWKB(geometry))"
-        ") AS bbox",
-    ]
+    import shutil
+    import tempfile
+
+    is_s3 = dir_path.startswith("s3://")
+
+    # For S3 we redirect DuckDB to a local temp dir; for local we write in place.
+    if is_s3:
+        tmp_local = Path(tempfile.mkdtemp(prefix="static_geoparquet_"))
+        write_target = str(tmp_local)
+    else:
+        tmp_local = None
+        write_target = dir_path
+        Path(write_target).mkdir(parents=True, exist_ok=True)
+
     col_select = ", ".join(f'"{c}"' for c in static_cols if c != "geometry")
     if not col_select:
         col_select = "*"
-
-    partition_clause = f"PARTITION_BY ({partition_by})" if partition_by else ""
 
     sql = f"""
         COPY (
@@ -320,37 +351,154 @@ async def _write_static_geoparquet_duckdb(
                     ymax := ST_YMax(ST_GeomFromWKB(geometry))
                 ) AS bbox
             FROM merged
+            {(f"ORDER BY {partition_by}") if partition_by else ""}
         )
-        TO '{dir_path}'
+        TO '{write_target}'
         WITH (
             FORMAT 'PARQUET',
-            ROW_GROUP_SIZE 100000,
+            ROW_GROUP_SIZE {settings.parquet_row_group_size},
             COMPRESSION 'ZSTD',
+            COMPRESSION_LEVEL {settings.parquet_compression_level},
             OVERWRITE_OR_IGNORE true
             {(", PARTITION_BY (" + partition_by + ")") if partition_by else ""}
         );
     """
     logger.debug(f"Static COPY SQL:\n{sql}")
     conn.execute(sql)
-    logger.info(f"Static GeoParquet written to {dir_path}")
+    logger.info(f"Static GeoParquet written to {write_target}")
+
+    # ---- Patch GeoParquet metadata on every written file -------------------
+    local_dir = tmp_local if is_s3 else Path(write_target)
+    written = sorted(local_dir.rglob("*.parquet"))
+    if not written:
+        logger.warning(f"No .parquet files found under {write_target} to patch.")
+    else:
+        for parquet_file in written:
+            _patch_geoparquet_metadata(parquet_file)
+        logger.info(
+            f"Patched GeoParquet metadata (v1.1.0 + covering.bbox) "
+            f"on {len(written)} file(s)"
+        )
+
+    # ---- Upload to S3 and clean up temp dir --------------------------------
+    if is_s3:
+        try:
+            n = _upload_dir_to_s3(tmp_local, dir_path)
+            logger.info(f"Uploaded {n} patched static file(s) to {dir_path}")
+        finally:
+            shutil.rmtree(tmp_local, ignore_errors=True)
 
 
-def _write_temporal_parquet_duckdb(
-    conn,
+def _patch_geoparquet_metadata(parquet_file: Path) -> None:
+    """Upgrade the GeoParquet ``geo`` metadata key inside a Parquet file.
+
+    Performs two upgrades in-place (via pyarrow schema-only rewrite):
+
+    * Bumps ``version`` from ``"1.0.0"`` → ``"1.1.0"``.
+    * Injects a ``covering.bbox`` entry into the primary geometry column
+      metadata, pointing to the ``bbox`` struct column's four child fields
+      (``xmin``, ``ymin``, ``xmax``, ``ymax``).
+
+    The data pages are not re-encoded; only the Parquet file footer metadata
+    is updated, so the operation is very fast regardless of file size.
+
+    Args:
+        parquet_file: Path to the ``.parquet`` file to patch.
+    """
+    try:
+        # Read full file to access schema + key-value metadata.
+        dataset = pq.read_table(str(parquet_file), memory_map=True)
+        kv_meta: dict[bytes, bytes] = dict(dataset.schema.metadata or {})
+
+        geo_key = b"geo"
+        if geo_key not in kv_meta:
+            logger.warning(
+                f"No 'geo' metadata found in {parquet_file.name} — skipping patch."
+            )
+            return
+
+        geo: dict = json.loads(kv_meta[geo_key].decode())
+
+        # 1. Upgrade version
+        geo["version"] = "1.1.0"
+
+        # 2. Add covering.bbox to the primary geometry column entry.
+        #    The primary geometry column is identified by geo["primary_column"];
+        #    fall back to "geometry" if the key is absent.
+        primary_col = geo.get("primary_column", "geometry")
+        col_meta: dict = geo.get("columns", {}).get(primary_col, {})
+        if "covering" not in col_meta:
+            col_meta["covering"] = {
+                "bbox": {
+                    "xmin": ["bbox", "xmin"],
+                    "ymin": ["bbox", "ymin"],
+                    "xmax": ["bbox", "xmax"],
+                    "ymax": ["bbox", "ymax"],
+                }
+            }
+            geo.setdefault("columns", {})[primary_col] = col_meta
+
+        kv_meta[geo_key] = json.dumps(geo).encode()
+
+        # Write back with updated schema metadata only (data unchanged).
+        new_schema = dataset.schema.with_metadata(kv_meta)
+        patched = dataset.cast(new_schema)
+        pq.write_table(
+            patched,
+            str(parquet_file),
+            compression="zstd",
+            compression_level=settings.parquet_compression_level,
+            row_group_size=settings.parquet_row_group_size,
+            write_statistics=True,
+        )
+        logger.debug(f"Patched GeoParquet metadata on {parquet_file.name}")
+    except Exception as exc:
+        logger.warning(
+            f"Failed to patch GeoParquet metadata on {parquet_file.name}: {exc}"
+        )
+
+
+def _upload_dir_to_s3(local_dir: Path, s3_prefix: str) -> int:
+    """Upload all ``.parquet`` files under *local_dir* to *s3_prefix* on S3.
+
+    Preserves the relative directory layout so that Hive-partition
+    subdirectories (e.g. ``sub_basin=Cauvery/``) survive the upload intact.
+
+    Args:
+        local_dir: Root of the local directory tree to upload.
+        s3_prefix: Target S3 prefix (``s3://bucket/path``).
+
+    Returns:
+        Number of files uploaded.
+    """
+    import s3fs
+
+    fs = s3fs.S3FileSystem()
+    files = sorted(local_dir.rglob("*.parquet"))
+    for local_file in files:
+        rel = local_file.relative_to(local_dir)
+        target = f"{s3_prefix.rstrip('/')}/{rel.as_posix()}"
+        fs.put(str(local_file), target)
+        logger.debug(f"Uploaded {rel} → {target}")
+    return len(files)
+
+
+def _write_temporal_parquet_polars(
+    merged_path: str,
     kind: str,
     temporal_cols: list[str],
     keep_cols: list[str],
     base_path: str,
     partition_by: str | None = None,
 ) -> None:
-    """Write melted temporal (fortnightly or annual) output via DuckDB COPY.
+    """Write melted temporal (fortnightly or annual) output using Polars.
 
-    Groups columns by their date/year suffix, constructs a UNION ALL query that
+    Groups columns by their date/year suffix, constructs a stacked LazyFrame that
     emits one row per (mws_id, date/year) and writes directly to partitioned
-    Parquet files using DuckDB's native COPY statement.
+    Parquet files using Polars write_parquet.
 
     Args:
-        conn: An open DuckDB connection with a 'merged' table registered.
+        merged_path: Path to the local merged Parquet file.
         kind: Either ``'fortnightly'`` or ``'annual'``.
         temporal_cols: The list of wide temporal column names to melt.
         keep_cols: Identity columns to carry forward in each output row.
@@ -366,58 +514,81 @@ def _write_temporal_parquet_duckdb(
         logger.warning(f"No {kind} groups found — skipping")
         return
 
-    keep_select = ", ".join(f'"{c}"' for c in keep_cols)
+    lf = pl.scan_parquet(merged_path)
+    lazy_frames: list[pl.LazyFrame] = []
 
-    # Collect the complete set of variable names across all time groups so that
-    # every UNION ALL branch has the same column count (missing vars → NULL).
-    all_vars: list[str] = []
+    # Keep track of variable order for the final projection
+    all_vars_ordered: list[str] = []
     for var_map in groups.values():
-        for var in var_map:
-            if var not in all_vars:
-                all_vars.append(var)
-
-    union_parts: list[str] = []
+        for var in var_map.keys():
+            if var not in all_vars_ordered:
+                all_vars_ordered.append(var)
 
     for time_val, var_map in groups.items():
-        var_select = ", ".join(
-            f'"{var_map[var]}" AS "{var}"' if var in var_map else f'NULL AS "{var}"'
-            for var in all_vars
-        )
+        exprs = [pl.col(c) for c in keep_cols]
         if kind == "fortnightly":
-            time_expr = f"DATE '{time_val}' AS date, {int(time_val[:4])} AS year"
+            exprs.append(
+                pl.lit(time_val).str.strptime(pl.Date, "%Y-%m-%d").alias("date")
+            )
+            exprs.append(pl.lit(int(time_val[:4])).cast(pl.Int32).alias("year"))
         else:
             first_year = _FIRST_YEAR_RE.search(time_val)
             year_val = int(first_year.group()) if first_year else 0
-            time_expr = f"{year_val} AS year"
+            exprs.append(pl.lit(year_val).cast(pl.Int32).alias("year"))
 
-        union_parts.append(
-            f"SELECT {keep_select}, {time_expr}, {var_select} FROM merged"
-        )
+        for var, orig_col in var_map.items():
+            exprs.append(pl.col(orig_col).alias(var))
 
-    full_query = " UNION ALL ".join(union_parts)
+        lazy_frames.append(lf.select(exprs))
+
+    final_lf = pl.concat(lazy_frames, how="diagonal_relaxed")
+
+    # Enforce strict column ordering
+    all_final_cols = keep_cols.copy()
+    if kind == "fortnightly":
+        all_final_cols.extend(["date", "year"])
+    else:
+        all_final_cols.append("year")
+    all_final_cols.extend(all_vars_ordered)
+
+    final_lf = final_lf.select(all_final_cols)
 
     partition_cols = []
     if partition_by:
         partition_cols.append(partition_by)
-    partition_cols.append("year")
-    partition_clause = f"PARTITION_BY ({', '.join(partition_cols)})"
+    if kind == "fortnightly":
+        partition_cols.append("year")
 
-    sql = f"""
-        COPY (
-            {full_query}
-        )
-        TO '{base_path}'
-        WITH (
-            FORMAT 'PARQUET',
-            ROW_GROUP_SIZE 100000,
-            COMPRESSION 'ZSTD',
-            OVERWRITE_OR_IGNORE true,
-            {partition_clause}
-        );
-    """
-    logger.debug(f"{kind} COPY SQL (first 500 chars): {sql[:500]}")
-    conn.execute(sql)
-    logger.info(f"{kind.capitalize()} output written to {base_path}")
+    import shutil
+    import tempfile
+
+    is_s3 = base_path.startswith("s3://")
+    if is_s3:
+        tmp_local = Path(tempfile.mkdtemp(prefix=f"{kind}_geoparquet_"))
+        write_target = str(tmp_local)
+    else:
+        tmp_local = None
+        write_target = base_path
+        Path(write_target).mkdir(parents=True, exist_ok=True)
+
+    logger.debug(f"Collecting {kind} frame and writing to {write_target} via Polars")
+    # final_df = final_lf.collect(engine="streaming")
+
+    final_lf.sink_parquet(
+        pl.PartitionBy(write_target, key=partition_cols),
+        compression="zstd",
+        compression_level=settings.parquet_compression_level,
+        row_group_size=settings.parquet_row_group_size,
+    )
+    logger.info(f"{kind.capitalize()} output written to {write_target}")
+
+    # ---- Upload to S3 and clean up temp dir --------------------------------
+    if is_s3:
+        try:
+            n = _upload_dir_to_s3(tmp_local, base_path)
+            logger.info(f"Uploaded {n} {kind} file(s) to {base_path}")
+        finally:
+            shutil.rmtree(tmp_local, ignore_errors=True)
 
 
 def _group_fortnightly_cols(cols: list[str]) -> dict[str, dict[str, str]]:
@@ -426,13 +597,25 @@ def _group_fortnightly_cols(cols: list[str]) -> dict[str, dict[str, str]]:
     Returns:
         ``{date_str -> {var_name -> orig_col_name}}``
     """
+    from dateutil.parser import parse
+
     groups: dict[str, dict[str, str]] = {}
     for col in cols:
         m = _DATE_SUFFIX_RE.search(col)
         if not m:
             continue
-        date_str = m.group(1)
-        prefix = col[: -(len(date_str) + 1)] if col.endswith("_" + date_str) else col
+
+        raw_date_str = m.group(1)
+        try:
+            date_str = parse(raw_date_str, yearfirst=True).date().isoformat()
+        except Exception:
+            date_str = raw_date_str
+
+        if col.endswith(raw_date_str):
+            prefix = col[: -len(raw_date_str)].rstrip("_")
+        else:
+            prefix = col
+
         groups.setdefault(date_str, {})[prefix] = col
     return groups
 
@@ -449,16 +632,12 @@ def _group_annual_cols(cols: list[str]) -> dict[str, dict[str, str]]:
         if not m:
             continue
         year_suffix = m.group(1)
-        prefix = (
-            col[: -(len(year_suffix) + 1)] if col.endswith("_" + year_suffix) else col
-        )
+        if col.endswith(year_suffix):
+            prefix = col[: -len(year_suffix)].rstrip("_")
+        else:
+            prefix = col
         groups.setdefault(year_suffix, {})[prefix] = col
     return groups
-
-
-# ---------------------------------------------------------------------------
-# Layer processing helpers
-# ---------------------------------------------------------------------------
 
 
 async def _process_layer(
@@ -499,10 +678,11 @@ async def _process_layer(
         parquet_glob = f"{settings.temp_path}/{layer}_*.parquet"
         matching = list(Path(settings.temp_path).glob(f"{layer}_*.parquet"))
         if not matching:
-            raise ValueError(
+            logger.error(
                 f"No Parquet files found for layer '{layer}' — "
-                "all worker tasks may have failed."
+                "all worker tasks may have failed. Skipping this layer."
             )
+            continue
         logger.info(f"Scanning {len(matching)} Parquet file(s) for layer '{layer}'")
         lazy_frames = [pl.scan_parquet(p) for p in matching]
         results[layer] = pl.concat(lazy_frames, how="diagonal_relaxed")
@@ -526,9 +706,10 @@ async def _fetch_version(s3_path: str) -> pl.LazyFrame:
                 "State": "state_name",
                 "District": "district_name",
                 "Tehsil": "tehsil_name",
-                "Layer Version": "version",
+                "Algorithm Version": "version",
             }
         )
+        .with_columns(pl.col("version").cast(pl.Float64, strict=False))
         .sort("state_name")
         .lazy()
     )

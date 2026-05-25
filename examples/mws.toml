@@ -29,8 +29,8 @@ entity = "mws"
 key = "mws_id"
 geometry = "geometry"
 base = "mws_boundaries"
-min_version = "1.1"
-max_version = "2"
+min_version = 1.1
+max_version = 2
 active_locations = "s3://geo-benchmark-data/metadata/mws_layer_version.csv"
 
 # Super layer for hierarchical partitioning
@@ -53,67 +53,93 @@ geom = "geometry"
 name = "terrain"
 type = "collection"
 url_template = "https://geoserver.core-stack.org:8443/geoserver/terrain/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=terrain%3A{district}_{tehsil}_cluster&outputFormat=application%2Fjson"
-drop = ["area_in_ha"]
+drop = ["area_in_ha", "id"]
 
 [layers.rename]
 uid = "mws_id"
-terrainClu = "terrain_cluster"
+terrainClu = "terr_cluster_id"
 valley_are = "valley_area"
-
+hill_slope = "hill_slope_area"
+geom = "geometry"
 
 [[layers]]
 name = "aquifer"
 type = "collection"
 url_template = "https://geoserver.core-stack.org:8443/geoserver/aquifer/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=aquifer%3Aaquifer_vector_{district}_{tehsil}&outputFormat=application%2Fjson"
-drop = ["newcode43", "area_in_ha"]
+drop = ["id", "area_in_ha"]
 
 [layers.rename]
 uid = "mws_id"
 Age = "age"
-Lithology_ = "litho_type_code"
-Major_Aq_1 = "aqui_type_code"
-Major_Aqui = "aqui_type"
-Principal_ = "principal_soil"
-Recommende = "rec_interventions"
-aquifer_class = "aqui_class"
-aquifer_count = "aqui_count"
-"yeild__" = "yield"
+Lithology_ = "lithology_rename"
+Major_Aqui = "major_aquifer"
+Principal_ = "principal_aq_system_name"
+Recommende = "recommended_gwd_mngmnt_intrvntn"
+"yeild__" = "yeild_pct"
+geom = "geometry"
 
 [[layers]]
 name = "soge"
 type = "collection"
 url_template = "https://geoserver.core-stack.org:8443/geoserver/soge/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=soge%3Asoge_vector_{district}_{tehsil}&outputFormat=application%2Fjson"
-# drop = ["area_in_ha", "soge_state", "soge_block", "soge_distr", "soge_tehsi"]
+drop = [
+    "OGC_FID",
+    "soge_objec",
+    "area_in_ha",
+    "soge_block",
+    "soge_distr",
+    "soge_state",
+    "soge_tehsi",
+]
 
 [layers.rename]
 uid = "mws_id"
-nat_discha = "net_discharge"
-# max_inters = "max_intersection"
+agwd_dom_i = "agwd_dom_ind"
+agwd_tot = "agwd_total"
+pct_area_s = "pct_area_asmnt"
+sgw_dev_pe = "sgw_dev_pct"
+geom = "geometry"
 
 [[layers]]
 name = "deltaG_well_depth"
 type = "collection"
 url_template = "https://geoserver.core-stack.org:8443/geoserver/mws_layers/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=mws_layers%3AdeltaG_well_depth_{district}_{tehsil}&outputFormat=application%2Fjson"
-drop = ["area_in_ha"]
+drop = ["area_in_ha", "id"]
 
 [layers.rename]
 uid = "mws_id"
+weighted_a = "weighted_avg_yld_aqfr"
+geom = "geometry"
 
 [[layers]]
 name = "cropping_intensity"
 type = "collection"
 url_template = "https://geoserver.core-stack.org:8443/geoserver/crop_intensity/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=crop_intensity%3A{district}_{tehsil}_intensity&outputFormat=application%2Fjson"
-drop = ["area_in_ha", "total_cropable_area_ever_hydroyear_2017_2024"]
+drop = ["area_in_ha", "total_cropable_area_ever_hydroyear_2017_2024", "id"]
 
 [layers.rename]
 uid = "mws_id"
+sum = "sum_cropped"
+geom = "geometry"
 
 [[layers]]
 name = "deltaG_fortnight"
 type = "collection"
 url_template = "https://geoserver.core-stack.org:8443/geoserver/mws_layers/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=mws_layers%3AdeltaG_fortnight_{district}_{tehsil}&outputFormat=application%2Fjson"
-drop = ["area_in_ha"]
+drop = ["area_in_ha", "id"]
 resolution = "fortnightly"
 
 [layers.rename]
 uid = "mws_id"
+geom = "geometry"
+
+[[layers]]
+name = "drought_index"
+type = "collection"
+url_template = "https://geoserver.core-stack.org:8443/geoserver/cropping_drought/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=cropping_drought%3A{district}_{tehsil}_drought&outputFormat=application%2Fjson"
+drop = ["OGC_FID", "id"]
+
+[layers.rename]
+uid = "mws_id"
+area_in_ha = "area_ha"
+geom = "geometry"

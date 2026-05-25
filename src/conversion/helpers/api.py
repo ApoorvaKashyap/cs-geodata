@@ -111,7 +111,12 @@ def download_and_convert_geojson(
             ]
         )
 
-        df.write_parquet(parquet_path, compression="zstd")
+        df.write_parquet(
+            parquet_path,
+            compression="zstd",
+            compression_level=settings.parquet_compression_level,
+            row_group_size=settings.parquet_row_group_size,
+        )
         logger.info(f"Written {parquet_path} ({df.height} rows)")
         return 0
 
@@ -218,7 +223,7 @@ def _convert_base_sync(
                     ORDER BY ST_Hilbert(geom)
                 )
                 TO '{tmp_path}'
-                WITH (FORMAT 'PARQUET', COMPRESSION 'ZSTD', ROW_GROUP_SIZE 100000);
+                WITH (FORMAT 'PARQUET', COMPRESSION 'ZSTD', COMPRESSION_LEVEL {settings.parquet_compression_level}, ROW_GROUP_SIZE {settings.parquet_row_group_size});
             """)
 
             # ----------------------------------------------------------------
@@ -248,7 +253,7 @@ def _convert_base_sync(
                         ON ST_Within(ST_Centroid(b._geom), s._poly)
                 )
                 TO '{output_path}'
-                WITH (FORMAT 'PARQUET', COMPRESSION 'ZSTD', ROW_GROUP_SIZE 100000);
+                WITH (FORMAT 'PARQUET', COMPRESSION 'ZSTD', COMPRESSION_LEVEL {settings.parquet_compression_level}, ROW_GROUP_SIZE {settings.parquet_row_group_size});
             """)
         else:
             # ----------------------------------------------------------------
@@ -263,7 +268,7 @@ def _convert_base_sync(
                     ORDER BY ST_Hilbert(geom)
                 )
                 TO '{output_path}'
-                WITH (FORMAT 'PARQUET', COMPRESSION 'ZSTD', ROW_GROUP_SIZE 100000);
+                WITH (FORMAT 'PARQUET', COMPRESSION 'ZSTD', COMPRESSION_LEVEL {settings.parquet_compression_level}, ROW_GROUP_SIZE {settings.parquet_row_group_size});
             """)
 
         logger.info(f"Base layer written to {output_path}")

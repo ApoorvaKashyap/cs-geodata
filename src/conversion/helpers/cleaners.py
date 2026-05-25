@@ -8,10 +8,10 @@ import polars as pl
 # ---------------------------------------------------------------------------
 # Matches a column that ends with an ISO date (YYYY-MM-DD), with or without
 # a preceding underscore — e.g. "dg_deltag_2023-04-01" or "2023-04-01".
-_FORTNIGHTLY_DATE_RE = re.compile(r"\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$")
+_FORTNIGHTLY_DATE_RE = re.compile(r"\d{1,4}-\d{1,2}-\d{1,4}$")
 # Matches a year-range (YYYY_YYYY / YYYY-YYYY) or a bare year anywhere in the
 # column name — e.g. "ci_kharif_2019_2020" or "te_slope_2023".
-_ANNUAL_YEAR_RE = re.compile(r"\d{4}[_-]\d{4}|\d{4}")
+_ANNUAL_YEAR_RE = re.compile(r"(\d{4}[_-]\d{4}|\d{4})$")
 
 
 def clean_label(label: str) -> str:

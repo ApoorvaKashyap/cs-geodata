@@ -34,8 +34,8 @@ def layer_conversion(request: ConversionRequest) -> None:
     try:
         import asyncio
 
-        output = asyncio.run(run_mws_pipeline(full_request))
-        logger.info(f"Layer conversion complete -> {output}")
+        asyncio.run(run_mws_pipeline(full_request))
+        logger.info(f"Layer conversion complete -> {request.output_path}")
     except Exception as e:
         logger.error(f"Layer conversion failed: {e}")
         raise

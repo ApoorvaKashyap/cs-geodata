@@ -39,6 +39,14 @@ class Settings(BaseSettings):
 
     # DuckDB
     duckdb_memory_limit: str = "4GB"
+    duckdb_threads: int = 4
+
+    # Parquet Output Configuration
+    parquet_row_group_size: int = 100000
+    parquet_compression_level: int = 15
+
+    # Pipeline testing / sampling
+    test_limit_tehsils: int | None = None
 
 
 settings = Settings()
