@@ -4,7 +4,6 @@ import warnings
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-import fsspec  # type: ignore[import-untyped]
 import polars as pl
 import polars_st as st  # type: ignore[import-untyped]
 import requests  # type: ignore[import-untyped]
@@ -15,12 +14,11 @@ from src.conversion.helpers.duckdb_funcs import init_duckdb
 from src.utils.configs import settings
 
 
-
 async def get_active() -> pl.DataFrame:
     """Fetch the list of active locations from the CoreStack API.
 
     Returns:
-        A polars DataFrame containing the active locations JSON response.
+        pl.DataFrame: A polars DataFrame containing the active locations JSON response.
     """
     response = requests.get(
         f"{settings.corestack_api_url}/get_active_locations/",
@@ -46,25 +44,25 @@ def download_and_convert_geojson(
 
     Combines the former download-only step with the per-tehsil column cleaning
     and admin-boundary tagging that was previously performed on the main thread
-    inside ``merge_tehsils_on_layer``.  Running this inside an RQ worker frees
+    inside ``merge_tehsils_on_layer``. Running this inside an RQ worker frees
     the pipeline orchestrator from the CPU-heavy GDAL GeoJSON parse.
 
     The output Parquet file is written to
     ``{settings.temp_path}/{layer}_{district}_{tehsil}.parquet``.
 
     Args:
-        layer: Layer name (used for the output filename).
-        district: Slug-form district name used to build the GeoServer URL.
-        tehsil: Slug-form tehsil name used to build the GeoServer URL.
-        state_name: Human-readable state label to tag each row.
-        district_name: Human-readable district label to tag each row.
-        tehsil_name: Human-readable tehsil label to tag each row.
-        url_template: WFS URL template with {district} and {tehsil} placeholders.
-        cols_rename: Column rename mapping to apply after reading the file.
-        cols_drop: Column names to drop after reading the file.
+        layer (str): Layer name (used for the output filename).
+        district (str): Slug-form district name used to build the GeoServer URL.
+        tehsil (str): Slug-form tehsil name used to build the GeoServer URL.
+        state_name (str): Human-readable state label to tag each row.
+        district_name (str): Human-readable district label to tag each row.
+        tehsil_name (str): Human-readable tehsil label to tag each row.
+        url_template (str): WFS URL template with {district} and {tehsil} placeholders.
+        cols_rename (dict[str, str]): Column rename mapping to apply after reading the file.
+        cols_drop (list[str]): Column names to drop after reading the file.
 
     Returns:
-        0 on success, -1 on failure.
+        int: 0 on success, -1 on failure.
     """
     url = url_template.format(district=district, tehsil=tehsil)
     logger.info(
@@ -89,14 +87,12 @@ def download_and_convert_geojson(
         df = st.read_file(geojson_path)
 
         if df.is_empty():
-            logger.warning(
-                f"Empty GeoJSON for {layer}/{district}/{tehsil} — skipping"
-            )
+            logger.warning(f"Empty GeoJSON for {layer}/{district}/{tehsil} — skipping")
             return 0
 
-        df = rename_and_drop(
-            df.lazy(), cols_rename, cols_drop
-        ).collect(engine="streaming")
+        df = rename_and_drop(df.lazy(), cols_rename, cols_drop).collect(
+            engine="streaming"
+        )
 
         if "geometry" not in df.columns and "geom" in df.columns:
             df = df.rename({"geom": "geometry"})
@@ -142,14 +138,14 @@ async def convert_base(
     centroid-in-polygon spatial join, enabling downstream Hive partitioning.
 
     Args:
-        input_path: Path or URI of the input file (local, ``s3://``, HTTPS).
-        output_path: Destination path for the converted Parquet file.
-        chunk_size: Unused; kept for API compatibility.
-        super_layer_source: Optional path/URI to the super-layer boundary file.
-        super_field: Column name in the super-layer file to copy onto each row.
+        input_path (str): Path or URI of the input file (local, ``s3://``, HTTPS).
+        output_path (str): Destination path for the converted Parquet file.
+        chunk_size (int): Unused; kept for API compatibility.
+        super_layer_source (str | None): Optional path/URI to the super-layer boundary file.
+        super_field (str | None): Column name in the super-layer file to copy onto each row.
 
     Returns:
-        True if conversion succeeded, False otherwise.
+        bool: True if conversion succeeded, False otherwise.
     """
     if input_path == output_path:
         logger.error(
@@ -160,8 +156,12 @@ async def convert_base(
     loop = asyncio.get_running_loop()
     with ThreadPoolExecutor() as pool:
         return await loop.run_in_executor(
-            pool, _convert_base_sync, input_path, output_path,
-            super_layer_source, super_field,
+            pool,
+            _convert_base_sync,
+            input_path,
+            output_path,
+            super_layer_source,
+            super_field,
         )
 
 
@@ -190,13 +190,13 @@ def _convert_base_sync(
     continues to work unchanged.
 
     Args:
-        input_path: Path or URI of the input file.
-        output_path: Destination path for the output Parquet file.
-        super_layer_source: Optional path/URI to the super-layer boundary file.
-        super_field: Column name in the super-layer whose value is copied to each row.
+        input_path (str): Path or URI of the input file.
+        output_path (str): Destination path for the output Parquet file.
+        super_layer_source (str | None): Optional path/URI to the super-layer boundary file.
+        super_field (str | None): Column name in the super-layer whose value is copied to each row.
 
     Returns:
-        True if conversion succeeded, False otherwise.
+        bool: True if conversion succeeded, False otherwise.
     """
     import tempfile
 
@@ -207,11 +207,11 @@ def _convert_base_sync(
     conn = init_duckdb()
     try:
         if super_layer_source and super_field:
-            # ----------------------------------------------------------------
             # Step 1: Hilbert-sort to a local temp parquet
-            # ----------------------------------------------------------------
             tmp_fd, tmp_path = tempfile.mkstemp(suffix="_base_hilbert.parquet")
-            import os; os.close(tmp_fd)
+            import os
+
+            os.close(tmp_fd)
 
             logger.info(f"Step 1: Hilbert sort -> temp {tmp_path}")
             conn.execute(f"""
@@ -226,9 +226,7 @@ def _convert_base_sync(
                 WITH (FORMAT 'PARQUET', COMPRESSION 'ZSTD', COMPRESSION_LEVEL {settings.parquet_compression_level}, ROW_GROUP_SIZE {settings.parquet_row_group_size});
             """)
 
-            # ----------------------------------------------------------------
             # Step 2: Spatial join with super layer → final output
-            # ----------------------------------------------------------------
             logger.info(
                 f"Step 2: Spatial join with super layer "
                 f"({super_layer_source}) on field '{super_field}'"
@@ -256,9 +254,7 @@ def _convert_base_sync(
                 WITH (FORMAT 'PARQUET', COMPRESSION 'ZSTD', COMPRESSION_LEVEL {settings.parquet_compression_level}, ROW_GROUP_SIZE {settings.parquet_row_group_size});
             """)
         else:
-            # ----------------------------------------------------------------
             # Single-step: Hilbert sort only (no super layer)
-            # ----------------------------------------------------------------
             conn.execute(f"""
                 COPY (
                     SELECT
@@ -286,6 +282,7 @@ def _convert_base_sync(
             with contextlib.suppress(Exception):
                 Path(tmp_path).unlink(missing_ok=True)
         import glob
+
         for f in glob.glob("/tmp/duckdb_*.db"):
             with contextlib.suppress(Exception):
                 Path(f).unlink()

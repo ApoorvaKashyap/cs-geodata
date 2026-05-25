@@ -1,10 +1,8 @@
 import warnings
 
 import polars as pl
-import polars_st as st
 from loguru import logger
 
-from src.utils.configs import settings
 
 warnings.filterwarnings("ignore", category=RuntimeWarning, module="pyogrio")
 DROP_BEFORE_JOIN = ["id", "tehsil", "district", "state", "geometry"]
@@ -20,11 +18,11 @@ def merge_all_layers(
     and versioned (version=1.2). This is the caller's responsibility.
 
     Args:
-        layer_results: Dictionary of layer names mapped to their LazyFrames.
-        base: The base MWS LazyFrame.
+        layer_results (dict[str, pl.LazyFrame]): Dictionary of layer names mapped to their LazyFrames.
+        base (pl.LazyFrame): The base MWS LazyFrame.
 
     Returns:
-        The fully merged LazyFrame containing all layers joined on mws_id and version.
+        pl.LazyFrame: The fully merged LazyFrame containing all layers joined on mws_id and version.
 
     Raises:
         ValueError: If the base layer is missing expected columns.
@@ -98,10 +96,10 @@ def _extract_location_meta(
     Deduplicates on mws_id + version in case a polygon appears in multiple tehsil files.
 
     Args:
-        layer_results: Dictionary mapping layer names to their LazyFrames.
+        layer_results (dict[str, pl.LazyFrame]): Dictionary mapping layer names to their LazyFrames.
 
     Returns:
-        A LazyFrame containing unique location mappings for mws_ids.
+        pl.LazyFrame: A LazyFrame containing unique location mappings for mws_ids.
 
     Raises:
         ValueError: If no single layer contains all necessary location columns.
@@ -152,11 +150,11 @@ def _get_missing_mws_ids(
     These are typically polygons outside the active tehsil list.
 
     Args:
-        base: The base MWS LazyFrame.
-        layer_results: Dictionary mapping layer names to their LazyFrames.
+        base (pl.LazyFrame): The base MWS LazyFrame.
+        layer_results (dict[str, pl.LazyFrame]): Dictionary mapping layer names to their LazyFrames.
 
     Returns:
-        A LazyFrame containing the missing mws_id and version pairs.
+        pl.LazyFrame: A LazyFrame containing the missing mws_id and version pairs.
     """
     all_layer_ids = pl.concat(
         [

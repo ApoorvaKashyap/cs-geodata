@@ -1,5 +1,4 @@
 import asyncio
-import contextlib
 import json
 import re
 from pathlib import Path
@@ -57,7 +56,7 @@ async def run_mws_pipeline(request: LayerConversionRequest) -> None:
     * ``annual/``          — melted long, one row per (mws_id, year), partitioned by year
 
     Args:
-        request: Configuration for the pipeline run, including layers, paths,
+        request (LayerConversionRequest): Configuration for the pipeline run, including layers, paths,
             version bounds, and column mappings.
     """
     import tempfile
@@ -199,11 +198,6 @@ async def run_mws_pipeline(request: LayerConversionRequest) -> None:
         path.unlink(missing_ok=True)
 
 
-# ---------------------------------------------------------------------------
-# Output writers
-# ---------------------------------------------------------------------------
-
-
 async def _write_split_parquets(
     merged_path: str,
     output_path: str,
@@ -224,10 +218,10 @@ async def _write_split_parquets(
     * ``annual/{partition_by}={val}/year=YYYY/``
 
     Args:
-        merged_path: Path to the local materialized merged Parquet file.
-        output_path: Target S3 or local directory for all output files.
-        all_cols: List of all column names in the merged frame.
-        partition_by: Optional outer Hive partition column name.
+        merged_path (str): Path to the local materialized merged Parquet file.
+        output_path (str): Target S3 or local directory for all output files.
+        all_cols (list[str]): List of all column names in the merged frame.
+        partition_by (str | None): Optional outer Hive partition column name.
     """
     keep_always = [c for c in COMMON_COLS if c in all_cols]
     if partition_by and partition_by not in keep_always:
@@ -250,13 +244,11 @@ async def _write_split_parquets(
             f"CREATE TABLE merged AS SELECT * FROM read_parquet('{merged_path}')"
         )
 
-        # ---- static GeoParquet ------------------------------------------------
         logger.info(f"Writing static GeoParquet → {output_path}/static/")
         await _write_static_geoparquet_duckdb(
             conn, static_cols, f"{output_path}/static", partition_by
         )
 
-        # ---- fortnightly -------------------------------------------------------
         if fortnightly_cols:
             non_geo_keep = [c for c in keep_always if c != "geometry"]
             logger.info(f"Writing fortnightly parquet → {output_path}/fortnightly")
@@ -271,7 +263,6 @@ async def _write_split_parquets(
         else:
             logger.info("No fortnightly columns detected — skipping fortnightly output")
 
-        # ---- annual ------------------------------------------------------------
         if annual_cols:
             non_geo_keep = [c for c in keep_always if c != "geometry"]
             logger.info(f"Writing annual parquet → {output_path}/annual")
@@ -317,9 +308,9 @@ async def _write_static_geoparquet_duckdb(
 
     Args:
         conn: An open DuckDB connection with a 'merged' table registered.
-        static_cols: List of column names to include in the static output.
-        dir_path: Destination directory path (S3 ``s3://`` or local).
-        partition_by: Optional Hive partition column.
+        static_cols (list[str]): List of column names to include in the static output.
+        dir_path (str): Destination directory path (S3 ``s3://`` or local).
+        partition_by (str | None): Optional Hive partition column.
     """
     import shutil
     import tempfile
@@ -367,7 +358,6 @@ async def _write_static_geoparquet_duckdb(
     conn.execute(sql)
     logger.info(f"Static GeoParquet written to {write_target}")
 
-    # ---- Patch GeoParquet metadata on every written file -------------------
     local_dir = tmp_local if is_s3 else Path(write_target)
     written = sorted(local_dir.rglob("*.parquet"))
     if not written:
@@ -380,7 +370,6 @@ async def _write_static_geoparquet_duckdb(
             f"on {len(written)} file(s)"
         )
 
-    # ---- Upload to S3 and clean up temp dir --------------------------------
     if is_s3:
         try:
             n = _upload_dir_to_s3(tmp_local, dir_path)
@@ -403,7 +392,7 @@ def _patch_geoparquet_metadata(parquet_file: Path) -> None:
     is updated, so the operation is very fast regardless of file size.
 
     Args:
-        parquet_file: Path to the ``.parquet`` file to patch.
+        parquet_file (Path): Path to the ``.parquet`` file to patch.
     """
     try:
         # Read full file to access schema + key-value metadata.
@@ -465,11 +454,11 @@ def _upload_dir_to_s3(local_dir: Path, s3_prefix: str) -> int:
     subdirectories (e.g. ``sub_basin=Cauvery/``) survive the upload intact.
 
     Args:
-        local_dir: Root of the local directory tree to upload.
-        s3_prefix: Target S3 prefix (``s3://bucket/path``).
+        local_dir (Path): Root of the local directory tree to upload.
+        s3_prefix (str): Target S3 prefix (``s3://bucket/path``).
 
     Returns:
-        Number of files uploaded.
+        int: Number of files uploaded.
     """
     import s3fs
 
@@ -498,12 +487,12 @@ def _write_temporal_parquet_polars(
     Parquet files using Polars write_parquet.
 
     Args:
-        merged_path: Path to the local merged Parquet file.
-        kind: Either ``'fortnightly'`` or ``'annual'``.
-        temporal_cols: The list of wide temporal column names to melt.
-        keep_cols: Identity columns to carry forward in each output row.
-        base_path: Root output directory (S3 or local).
-        partition_by: Optional outer Hive partition column.
+        merged_path (str): Path to the local merged Parquet file.
+        kind (str): Either ``'fortnightly'`` or ``'annual'``.
+        temporal_cols (list[str]): The list of wide temporal column names to melt.
+        keep_cols (list[str]): Identity columns to carry forward in each output row.
+        base_path (str): Root output directory (S3 or local).
+        partition_by (str | None): Optional outer Hive partition column.
     """
     if kind == "fortnightly":
         groups = _group_fortnightly_cols(temporal_cols)
@@ -582,7 +571,6 @@ def _write_temporal_parquet_polars(
     )
     logger.info(f"{kind.capitalize()} output written to {write_target}")
 
-    # ---- Upload to S3 and clean up temp dir --------------------------------
     if is_s3:
         try:
             n = _upload_dir_to_s3(tmp_local, base_path)
@@ -594,8 +582,11 @@ def _write_temporal_parquet_polars(
 def _group_fortnightly_cols(cols: list[str]) -> dict[str, dict[str, str]]:
     """Group fortnightly column names by their ISO date suffix.
 
+    Args:
+        cols (list[str]): The list of fortnightly column names.
+
     Returns:
-        ``{date_str -> {var_name -> orig_col_name}}``
+        dict[str, dict[str, str]]: ``{date_str -> {var_name -> orig_col_name}}``
     """
     from dateutil.parser import parse
 
@@ -623,8 +614,11 @@ def _group_fortnightly_cols(cols: list[str]) -> dict[str, dict[str, str]]:
 def _group_annual_cols(cols: list[str]) -> dict[str, dict[str, str]]:
     """Group annual column names by their year / year-range suffix.
 
+    Args:
+        cols (list[str]): The list of annual column names.
+
     Returns:
-        ``{year_suffix -> {var_name -> orig_col_name}}``
+        dict[str, dict[str, str]]: ``{year_suffix -> {var_name -> orig_col_name}}``
     """
     groups: dict[str, dict[str, str]] = {}
     for col in cols:
@@ -653,11 +647,12 @@ async def _process_layer(
     in-process GDAL parsing, no large in-memory concat.
 
     Args:
-        request: The pipeline request containing layer configurations and
+        request (LayerConversionRequest): The pipeline request containing layer configurations and
             per-layer column mappings.
+        tehsils (pl.LazyFrame): A lazy dataframe of tehsils.
 
     Returns:
-        A dictionary mapping layer names to lazy Parquet glob scans.
+        dict[str, pl.LazyFrame]: A dictionary mapping layer names to lazy Parquet glob scans.
 
     Raises:
         ValueError: If no Parquet files were produced for a layer (e.g. all
@@ -675,7 +670,6 @@ async def _process_layer(
 
     for descriptor in request.attribute_layers:
         layer = descriptor.name
-        parquet_glob = f"{settings.temp_path}/{layer}_*.parquet"
         matching = list(Path(settings.temp_path).glob(f"{layer}_*.parquet"))
         if not matching:
             logger.error(
@@ -694,10 +688,10 @@ async def _fetch_version(s3_path: str) -> pl.LazyFrame:
     """Fetch the layer version metadata CSV from S3.
 
     Args:
-        s3_path: The S3 path to the layer version CSV.
+        s3_path (str): The S3 path to the layer version CSV.
 
     Returns:
-        A lazy dataframe containing the version metadata sorted by state.
+        pl.LazyFrame: A lazy dataframe containing the version metadata sorted by state.
     """
     df = pl.read_csv(s3_path)
     return (
@@ -727,12 +721,12 @@ async def _fetch_base(
     to assign the super-layer field to every base entity row.
 
     Args:
-        base_layer: Path or URI to the base layer.
-        super_layer_source: Optional super-layer boundary file path/URI.
-        super_field: Column name in the super-layer to copy onto each row.
+        base_layer (str): Path or URI to the base layer.
+        super_layer_source (str | None): Optional super-layer boundary file path/URI.
+        super_field (str | None): Column name in the super-layer to copy onto each row.
 
     Returns:
-        A lazy dataframe of the base layer.
+        pl.LazyFrame: A lazy dataframe of the base layer.
 
     Raises:
         ValueError: If base layer conversion fails.
