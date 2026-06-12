@@ -1,0 +1,29 @@
+# Descriptor for the Tehsil entity dataset.
+#
+# Source modes:
+#   Pan India layers  → type="item" + stac_item (schema/CRS) + source (S3 override)
+#   WFS layers        → type="collection" + sample_item (collection URL) + url_template (WFS URL construction)
+#
+# Resolution and temporal_pattern are auto-detected from STAC table:columns.
+
+
+entity = "tehsil"
+key = "tehsil_id"
+geometry = "geometry"
+base = "tehsil_boundaries"
+
+
+[[layers]]
+name = "tehsil_boundaries"
+type = "item"
+source = "s3://geo-benchmark-data/base_converted/tehsil.parquet"
+drop = ["OGC_FID"]
+
+[layers.rename]
+TEHSIL = "tehsil"
+id = "tehsil_id"
+STATE = "state"
+District = "district"
+Shape_Leng = "shape_length"
+Shape_Area = "shape_area"
+geom = "geometry"

@@ -11,31 +11,38 @@ DROP_BEFORE_JOIN = ["id", "tehsil", "district", "state", "geometry"]
 def merge_all_layers(
     layer_results: dict[str, pl.LazyFrame],
     base: pl.LazyFrame,
+    entity_key: str = "mws_id",
 ) -> pl.LazyFrame:
     """Merge all processed layer dataframes onto the base dataset.
 
-    Base must arrive already renamed (uid->mws_id, geom->geometry)
-    and versioned (version=1.2). This is the caller's responsibility.
+    Base must arrive already renamed (uid->entity_key, geom->geometry)
+    and versioned. This is the caller's responsibility.
 
     Args:
         layer_results (dict[str, pl.LazyFrame]): Dictionary of layer names mapped to their LazyFrames.
-        base (pl.LazyFrame): The base MWS LazyFrame.
+        base (pl.LazyFrame): The base entity LazyFrame.
+        entity_key (str): The join key column name shared across all layers (default: 'mws_id').
 
     Returns:
-        pl.LazyFrame: The fully merged LazyFrame containing all layers joined on mws_id and version.
+        pl.LazyFrame: The fully merged LazyFrame containing all layers joined on entity_key.
 
     Raises:
         ValueError: If the base layer is missing expected columns.
     """
     # Validate base has expected columns
     base_schema = base.collect_schema().names()
-    for col in ["mws_id", "geometry", "area_in_ha"]:
-        if col not in base_schema:
-            raise ValueError(f"Base layer missing expected column: '{col}'")
+    if entity_key not in base_schema:
+        raise ValueError(f"Base layer missing entity key column: '{entity_key}'")
+    if "geometry" not in base_schema:
+        raise ValueError("Base layer missing expected column: 'geometry'")
+    if "area_in_ha" not in base_schema:
+        logger.warning(
+            "Base layer missing 'area_in_ha' column — proceeding without it."
+        )
 
     logger.info("Extracting location metadata from layers")
-    location_meta = _extract_location_meta(layer_results)
-    base = base.join(location_meta, on="mws_id", how="left")
+    location_meta = _extract_location_meta(layer_results, entity_key=entity_key)
+    base = base.join(location_meta, on=entity_key, how="left")
 
     merged = base
     for layer_name, layer_df in layer_results.items():
@@ -48,29 +55,29 @@ def merge_all_layers(
 
         if "area_in_ha" in layer_df.collect_schema().names():
             logger.warning(
-                f"Dropping area_in_ha from {layer_name} — MWSv2 is authoritative"
+                f"Dropping area_in_ha from {layer_name} — base layer is authoritative"
             )
             layer_df = layer_df.drop("area_in_ha")
 
-        # Deduplicate on mws_id alone — polygons spanning multiple tehsils
+        # Deduplicate on entity_key alone — polygons spanning multiple tehsils
         # appear in multiple GeoJSON files.
         # Prefer non-null values when duplicates exist
         layer_df = (
-            layer_df.sort(by="mws_id")
-            .group_by("mws_id")
+            layer_df.sort(by=entity_key)
+            .group_by(entity_key)
             .agg(pl.all().drop_nulls().first())
         )
 
-        # Validate mws_id exists before joining
-        if "mws_id" not in layer_df.collect_schema().names():
+        # Validate entity_key exists before joining
+        if entity_key not in layer_df.collect_schema().names():
             raise ValueError(
-                f"Layer '{layer_name}' missing 'mws_id' column after processing. "
+                f"Layer '{layer_name}' missing '{entity_key}' column after processing. "
                 f"Check descriptor rename mapping. Available columns: {layer_df.collect_schema().names()}"
             )
 
         merged = merged.join(
             layer_df,
-            on="mws_id",
+            on=entity_key,
             how="left",
             suffix=f"_{layer_name}",
         )
@@ -85,25 +92,40 @@ def merge_all_layers(
 
 def _extract_location_meta(
     layer_results: dict[str, pl.LazyFrame],
+    entity_key: str = "mws_id",
 ) -> pl.LazyFrame:
     """Extract authoritative location metadata from the layers.
 
-    Retrieves mws_id + version + tehsil + district + state from layers.
-    Only covers MWS polygons that were in active tehsils. Polygons outside
+    Retrieves entity_key + tehsil + district + state from layers.
+    Only covers entity polygons that were in active tehsils. Polygons outside
     active tehsils will correctly get null location metadata after the left join.
 
     Prefers simpler layers (terrain, soge) with lowest chance of null identity cols.
-    Deduplicates on mws_id + version in case a polygon appears in multiple tehsil files.
+    Deduplicates on entity_key in case a polygon appears in multiple tehsil files.
 
     Args:
         layer_results (dict[str, pl.LazyFrame]): Dictionary mapping layer names to their LazyFrames.
+        entity_key (str): The join key column name (default: 'mws_id').
 
     Returns:
-        pl.LazyFrame: A LazyFrame containing unique location mappings for mws_ids.
+        pl.LazyFrame: A LazyFrame containing unique location mappings for entity IDs.
 
     Raises:
         ValueError: If no single layer contains all necessary location columns.
     """
+    if not layer_results:
+        logger.info(
+            "No attribute layers available — skipping location metadata extraction."
+        )
+        return pl.LazyFrame(
+            schema={
+                entity_key: pl.Utf8,
+                "tehsil": pl.Utf8,
+                "district": pl.Utf8,
+                "state": pl.Utf8,
+            }
+        )
+
     preferred_order = [
         "terrain",
         "soge",
@@ -123,20 +145,20 @@ def _extract_location_meta(
         layer_df = layer_results[layer_name]
         schema = layer_df.collect_schema().names()
 
-        if all(c in schema for c in ["mws_id", "tehsil", "district", "state"]):
+        if all(c in schema for c in [entity_key, "tehsil", "district", "state"]):
             logger.info(f"Using '{layer_name}' as location metadata source")
-            meta = layer_df.select(["mws_id", "tehsil", "district", "state"]).unique(
-                subset=["mws_id"]
+            meta = layer_df.select([entity_key, "tehsil", "district", "state"]).unique(
+                subset=[entity_key]
             )
 
             count = meta.collect(engine="streaming").height
             logger.info(
-                f"Location metadata: {count} unique mws_id pairs from '{layer_name}'"
+                f"Location metadata: {count} unique {entity_key} pairs from '{layer_name}'"
             )
             return meta
 
     raise ValueError(
-        "No layer contains all of: mws_id, tehsil, district, state. "
+        f"No layer contains all of: {entity_key}, tehsil, district, state. "
         "Cannot extract location metadata."
     )
 
@@ -144,34 +166,40 @@ def _extract_location_meta(
 def _get_missing_mws_ids(
     base: pl.LazyFrame,
     layer_results: dict[str, pl.LazyFrame],
+    entity_key: str = "mws_id",
 ) -> pl.LazyFrame:
-    """Identify MWSv2 polygon IDs that do not appear in any layer.
+    """Identify entity polygon IDs that do not appear in any layer.
 
     These are typically polygons outside the active tehsil list.
 
     Args:
-        base (pl.LazyFrame): The base MWS LazyFrame.
+        base (pl.LazyFrame): The base entity LazyFrame.
         layer_results (dict[str, pl.LazyFrame]): Dictionary mapping layer names to their LazyFrames.
+        entity_key (str): The join key column name (default: 'mws_id').
 
     Returns:
-        pl.LazyFrame: A LazyFrame containing the missing mws_id and version pairs.
+        pl.LazyFrame: A LazyFrame containing the missing entity IDs.
     """
+    if not layer_results:
+        logger.info("No attribute layers — returning empty missing-ID frame.")
+        return pl.LazyFrame(schema={entity_key: pl.Utf8})
+
     all_layer_ids = pl.concat(
         [
-            layer_df.select("mws_id").unique()
+            layer_df.select(entity_key).unique()
             for layer_df in layer_results.values()
-            if "mws_id" in layer_df.collect_schema().names()
+            if entity_key in layer_df.collect_schema().names()
         ],
         how="diagonal_relaxed",
     ).unique()
 
-    base_ids = base.select("mws_id")
+    base_ids = base.select(entity_key)
 
-    missing = base_ids.join(all_layer_ids, on="mws_id", how="anti")
+    missing = base_ids.join(all_layer_ids, on=entity_key, how="anti")
 
     missing_count = missing.collect(engine="streaming").height
     logger.info(
-        f"Found {missing_count} MWSv2 polygons not present in any active tehsil layer"
+        f"Found {missing_count} entity polygons not present in any active tehsil layer"
     )
 
     return missing

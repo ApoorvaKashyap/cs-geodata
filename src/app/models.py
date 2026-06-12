@@ -3,7 +3,7 @@ from typing import Annotated, Literal
 
 import fsspec  # type: ignore[import-untyped]
 from fastapi import Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 S3Path = Annotated[str, Query(pattern=r"^s3://([^/]+)/(.*?([^/]+)/?)$")]
 LocationField = str | S3Path
@@ -15,8 +15,7 @@ class LayerDescriptor(BaseModel):
     name: str = Field(description="Unique layer identifier.")
     type: Literal["item", "collection"] = Field(
         description=(
-            "'item' = single pan-India file; "
-            "'collection' = tehsil-partitioned WFS."
+            "'item' = single pan-India file; 'collection' = tehsil-partitioned WFS."
         )
     )
     source: str | None = Field(
@@ -67,8 +66,9 @@ class LayerConversionRequest(BaseModel):
     max_version: float = Field(
         default=9999.0, description="Maximum layer version to include (inclusive)."
     )
-    layer_version: str = Field(
-        default="", description="URL to the layer version CSV."
+    layer_version: str | None = Field(
+        default=None,
+        description="URL to the layer version CSV. Optional — omit to skip tehsil filtering and run on all attribute layers without version constraints.",
     )
     output_path: str = Field(
         default="", description="Destination directory for output Parquet files."
@@ -77,24 +77,51 @@ class LayerConversionRequest(BaseModel):
         default=None,
         description=(
             "Path or URI to the super-layer file used for hierarchical partitioning "
-            "(e.g. sub-basin boundaries GeoJSON on S3)."
+            "(e.g. sub-basin boundaries GeoJSON on S3). Optional."
         ),
+    )
+    super_layer_key: str | None = Field(
+        default=None,
+        description="Key column in the super-layer file (informational; not used in joins). Optional.",
     )
     super_field: str | None = Field(
         default=None,
         description=(
             "Column name inside the super-layer file whose value is assigned to each "
-            "base entity row via a centroid-in-polygon spatial join."
+            "base entity row via a centroid-in-polygon spatial join. Optional."
         ),
     )
     partition_by: str | None = Field(
         default=None,
         description=(
             "Output partition column name. Usually the same as super_field. "
-            "All output Parquet files are partitioned on this column."
+            "All output Parquet files are partitioned on this column. Optional."
         ),
     )
     layers: list[LayerDescriptor] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_super_layer_fields(self) -> "LayerConversionRequest":
+        """Ensure super-layer fields are used consistently.
+
+        Rules:
+        - ``super_layer_source`` and ``super_field`` must both be provided or
+          both be absent. Providing only one is a configuration error.
+        - ``partition_by`` is independent and may be set or omitted freely.
+          If it is set without a super-layer, the column must already exist
+          on the base layer; the pipeline will validate this at runtime.
+        """
+        has_source = self.super_layer_source is not None
+        has_field = self.super_field is not None
+        if has_source != has_field:
+            missing = "super_field" if has_source else "super_layer_source"
+            provided = "super_layer_source" if has_source else "super_field"
+            raise ValueError(
+                f"'{provided}' was provided but '{missing}' is missing. "
+                "Both 'super_layer_source' and 'super_field' must be set together, "
+                "or both must be omitted."
+            )
+        return self
 
     @property
     def base_layer_descriptor(self) -> LayerDescriptor:
@@ -119,8 +146,7 @@ class ConversionRequest(BaseModel):
 
     descriptor_url: str = Field(
         description=(
-            "URL to the TOML descriptor file "
-            "(S3 URI, GitHub raw URL, or plain HTTPS)."
+            "URL to the TOML descriptor file (S3 URI, GitHub raw URL, or plain HTTPS)."
         )
     )
     output_path: str = Field(

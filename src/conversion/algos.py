@@ -64,25 +64,40 @@ async def run_mws_pipeline(request: LayerConversionRequest) -> None:
     tmpdir = tempfile.mkdtemp()
     logger.info(f"Using temp directory: {tmpdir}")
 
-    logger.info(f"Fetching layer version CSV from {request.layer_version}")
-    tehsils = await _fetch_version(request.layer_version)
+    if request.layer_version:
+        logger.info(f"Fetching layer version CSV from {request.layer_version}")
+        tehsils = await _fetch_version(request.layer_version)
 
-    # Filter tehsils to the requested version range
-    logger.info(
-        f"Filtering tehsils to version range [{request.min_version}, {request.max_version}]"
-    )
-    tehsils = tehsils.filter(
-        (pl.col("version") >= request.min_version)
-        & (pl.col("version") <= request.max_version)
-    )
-    logger.debug(
-        f"List of Filtered Tehsils: {tehsils.collect(engine='streaming')['tehsil_name'].to_list()}"
-    )
-    if settings.test_limit_tehsils is not None:
-        logger.warning(
-            f"TESTING MODE: Limiting to {settings.test_limit_tehsils} tehsils."
+        # Filter tehsils to the requested version range
+        logger.info(
+            f"Filtering tehsils to version range [{request.min_version}, {request.max_version}]"
         )
-        tehsils = tehsils.head(settings.test_limit_tehsils)
+        tehsils = tehsils.filter(
+            (pl.col("version") >= request.min_version)
+            & (pl.col("version") <= request.max_version)
+        )
+        logger.debug(
+            f"List of Filtered Tehsils: {tehsils.collect(engine='streaming')['tehsil_name'].to_list()}"
+        )
+        if settings.test_limit_tehsils is not None:
+            logger.warning(
+                f"TESTING MODE: Limiting to {settings.test_limit_tehsils} tehsils."
+            )
+            tehsils = tehsils.head(settings.test_limit_tehsils)
+    else:
+        logger.info(
+            "No layer_version URL provided — skipping tehsil filtering. "
+            "Attribute WFS layers will not be fetched."
+        )
+        tehsils = pl.LazyFrame(
+            schema={
+                "state_name": pl.Utf8,
+                "district_name": pl.Utf8,
+                "tehsil_name": pl.Utf8,
+                "version": pl.Float64,
+                "tehsil": pl.Utf8,
+            }
+        )
 
     logger.info("Fetching base layer")
     base_descriptor = request.base_layer_descriptor
@@ -134,30 +149,38 @@ async def run_mws_pipeline(request: LayerConversionRequest) -> None:
         logger.info(f"Layer '{layer}' materialized")
 
     # Log coverage
-    missing = _get_missing_mws_ids(base, layer_results)
+    missing = _get_missing_mws_ids(base, layer_results, entity_key=request.key)
     missing_df = missing.collect(engine="streaming")
     if missing_df.height > 0:
         logger.warning(
-            f"{missing_df.height} MWSv2 polygons are outside active tehsils — "
+            f"{missing_df.height} base polygons are outside active tehsils — "
             f"they will appear with null layer values. "
-            f"Sample IDs: {missing_df['mws_id'].head(5).to_list()}"
+            f"Sample IDs: {missing_df[request.key].head(5).to_list()}"
         )
 
     logger.info("Merging all layers onto base")
     if request.partition_by:
-        null_count = (
-            base.filter(pl.col(request.partition_by).is_null())
-            .collect(engine="streaming")
-            .height
-        )
-        if null_count > 0:
+        base_schema = base.collect_schema().names()
+        if request.partition_by not in base_schema:
             logger.warning(
-                f"Dropping {null_count} rows with null {request.partition_by} "
-                f"(out of coverage area)"
+                f"partition_by column '{request.partition_by}' does not exist on the "
+                "base frame — skipping null-row filter. Ensure a super-layer is "
+                "configured if you need this column populated."
             )
-            base = base.filter(pl.col(request.partition_by).is_not_null())
+        else:
+            null_count = (
+                base.filter(pl.col(request.partition_by).is_null())
+                .collect(engine="streaming")
+                .height
+            )
+            if null_count > 0:
+                logger.warning(
+                    f"Dropping {null_count} rows with null {request.partition_by} "
+                    f"(out of coverage area)"
+                )
+                base = base.filter(pl.col(request.partition_by).is_not_null())
 
-    merged = merge_all_layers(layer_results, base)
+    merged = merge_all_layers(layer_results, base, entity_key=request.key)
 
     # Sink merged frame to temp parquet to break the join plan
     merged_path = f"{tmpdir}/merged.parquet"
@@ -317,18 +340,24 @@ async def _write_static_geoparquet_duckdb(
 
     is_s3 = dir_path.startswith("s3://")
 
-    # For S3 we redirect DuckDB to a local temp dir; for local we write in place.
-    if is_s3:
-        tmp_local = Path(tempfile.mkdtemp(prefix="static_geoparquet_"))
-        write_target = str(tmp_local)
-    else:
-        tmp_local = None
-        write_target = dir_path
-        Path(write_target).mkdir(parents=True, exist_ok=True)
+    # Always write DuckDB output into a local temp directory first.
+    # This avoids DuckDB COPY TO path-resolution bugs on some versions when
+    # the destination directory was just freshly created by Python.
+    # For partitioned writes the whole temp dir is the target; for single-file
+    # writes we write part-0.parquet into the temp dir then move it.
+    tmp_local = Path(tempfile.mkdtemp(prefix="static_geoparquet_"))
+    write_target = str(tmp_local)
+
+    # Ensure the final destination directory exists (local only; S3 is handled by upload).
+    if not is_s3:
+        Path(dir_path).mkdir(parents=True, exist_ok=True)
 
     col_select = ", ".join(f'"{c}"' for c in static_cols if c != "geometry")
     if not col_select:
         col_select = "*"
+
+    # Without PARTITION_BY, DuckDB writes a single file — give it an explicit filename.
+    copy_target = write_target if partition_by else str(tmp_local / "part-0.parquet")
 
     sql = f"""
         COPY (
@@ -344,22 +373,21 @@ async def _write_static_geoparquet_duckdb(
             FROM merged
             {(f"ORDER BY {partition_by}") if partition_by else ""}
         )
-        TO '{write_target}'
+        TO '{copy_target}'
         WITH (
             FORMAT 'PARQUET',
             ROW_GROUP_SIZE {settings.parquet_row_group_size},
             COMPRESSION 'ZSTD',
-            COMPRESSION_LEVEL {settings.parquet_compression_level},
-            OVERWRITE_OR_IGNORE true
-            {(", PARTITION_BY (" + partition_by + ")") if partition_by else ""}
+            COMPRESSION_LEVEL {settings.parquet_compression_level}
+            {(", OVERWRITE_OR_IGNORE true, PARTITION_BY (" + partition_by + ")") if partition_by else ""}
         );
     """
     logger.debug(f"Static COPY SQL:\n{sql}")
     conn.execute(sql)
-    logger.info(f"Static GeoParquet written to {write_target}")
+    logger.info(f"Static GeoParquet written to temp: {write_target}")
 
-    local_dir = tmp_local if is_s3 else Path(write_target)
-    written = sorted(local_dir.rglob("*.parquet"))
+    # Patch GeoParquet metadata on every file in the temp dir.
+    written = sorted(tmp_local.rglob("*.parquet"))
     if not written:
         logger.warning(f"No .parquet files found under {write_target} to patch.")
     else:
@@ -370,12 +398,21 @@ async def _write_static_geoparquet_duckdb(
             f"on {len(written)} file(s)"
         )
 
-    if is_s3:
-        try:
+    # Move patched files to their final destination.
+    try:
+        if is_s3:
             n = _upload_dir_to_s3(tmp_local, dir_path)
             logger.info(f"Uploaded {n} patched static file(s) to {dir_path}")
-        finally:
-            shutil.rmtree(tmp_local, ignore_errors=True)
+        else:
+            # Copy every file preserving the relative Hive subdirectory structure.
+            for local_file in written:
+                rel = local_file.relative_to(tmp_local)
+                dest = Path(dir_path) / rel
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(str(local_file), str(dest))
+            logger.info(f"Copied {len(written)} static file(s) to {dir_path}")
+    finally:
+        shutil.rmtree(tmp_local, ignore_errors=True)
 
 
 def _patch_geoparquet_metadata(parquet_file: Path) -> None:
@@ -557,8 +594,8 @@ def _write_temporal_parquet_polars(
         write_target = str(tmp_local)
     else:
         tmp_local = None
-        write_target = base_path
-        Path(write_target).mkdir(parents=True, exist_ok=True)
+        write_target = Path(base_path).expanduser()
+        write_target.mkdir(parents=True, exist_ok=True)
 
     logger.debug(f"Collecting {kind} frame and writing to {write_target} via Polars")
     # final_df = final_lf.collect(engine="streaming")
