@@ -608,7 +608,7 @@ def _write_temporal_parquet_polars(
     )
     logger.info(f"{kind.capitalize()} output written to {write_target}")
 
-    if is_s3:
+    if is_s3 and tmp_local is not None:
         try:
             n = _upload_dir_to_s3(tmp_local, base_path)
             logger.info(f"Uploaded {n} {kind} file(s) to {base_path}")
