@@ -129,9 +129,11 @@ async def run_mws_pipeline(request: LayerConversionRequest) -> None:
         .with_columns(
             st.geom("geometry").st.set_srid(4326).st.to_wkb().alias("geometry")  # type: ignore[attr-defined]
         )
-        .collect(engine="streaming")
-        .lazy()
     )
+    from src.conversion.helpers.cleaners import convert_m2_to_ha
+
+    base = convert_m2_to_ha(base, base_descriptor.m2_to_ha)
+    base = base.collect(engine="streaming").lazy()
 
     logger.info("Processing layers")
     layer_results = await _process_layer(request, tehsils)

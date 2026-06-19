@@ -39,6 +39,7 @@ def download_and_convert_geojson(
     url_template: str,
     cols_rename: dict[str, str],
     cols_drop: list[str],
+    m2_to_ha: list[str],
 ) -> int:
     """Download a GeoJSON from GeoServer, clean it, and persist as Parquet.
 
@@ -90,9 +91,11 @@ def download_and_convert_geojson(
             logger.warning(f"Empty GeoJSON for {layer}/{district}/{tehsil} — skipping")
             return 0
 
-        df = rename_and_drop(df.lazy(), cols_rename, cols_drop).collect(
-            engine="streaming"
-        )
+        df = rename_and_drop(df.lazy(), cols_rename, cols_drop)
+
+        from src.conversion.helpers.cleaners import convert_m2_to_ha
+
+        df = convert_m2_to_ha(df, m2_to_ha).collect(engine="streaming")
 
         if "geometry" not in df.columns and "geom" in df.columns:
             df = df.rename({"geom": "geometry"})

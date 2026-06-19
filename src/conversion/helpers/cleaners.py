@@ -1,5 +1,6 @@
 import json
 import re
+import fnmatch
 
 import polars as pl
 
@@ -115,6 +116,27 @@ def rename_and_drop(
         .rename(expanded_rename, strict=False)
         .select(pl.all().name.to_lowercase())
     )
+
+
+def convert_m2_to_ha(layer: pl.LazyFrame, cols_to_convert: list[str]) -> pl.LazyFrame:
+    """Divide matching columns by 10,000 to convert m2 to hectares.
+
+    Supports glob patterns in cols_to_convert.
+    """
+    if not cols_to_convert:
+        return layer
+
+    schema_cols = layer.collect_schema().names()
+
+    matched_cols = set()
+    for pattern in cols_to_convert:
+        matched_cols.update(fnmatch.filter(schema_cols, pattern))
+
+    if matched_cols:
+        exprs = [(pl.col(c) / 10000.0).alias(c) for c in matched_cols]
+        return layer.with_columns(exprs)
+
+    return layer
 
 
 def get_layer_prefix(layer: str) -> str:

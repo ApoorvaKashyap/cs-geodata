@@ -41,6 +41,10 @@ class LayerDescriptor(BaseModel):
     rename: dict[str, str] = Field(
         default_factory=dict, description="Column rename mapping."
     )
+    m2_to_ha: list[str] = Field(
+        default_factory=list,
+        description="List of columns (or globs) to convert from m2 to hectares (divided by 10000).",
+    )
     resolution: str | None = Field(
         default=None,
         description="Temporal resolution hint, e.g. 'fortnightly'.",
@@ -190,7 +194,7 @@ def load_descriptor(descriptor_url: str, output_path: str) -> LayerConversionReq
     """
     try:
         with fsspec.open(descriptor_url, "rb") as fh:
-            raw: dict = tomllib.load(fh)
+            raw: dict = tomllib.load(fh)  # type: ignore[arg-type]
     except Exception as exc:
         raise ValueError(
             f"Failed to load descriptor from {descriptor_url!r}: {exc}"

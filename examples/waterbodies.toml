@@ -18,10 +18,11 @@ name = "pan_india_waterbodies"
 type = "item"
 source = "s3://geo-benchmark-data/base_converted/waterbodies.parquet"
 drop = ["OGC_FID", "category_sq_m"]
+m2_to_ha = ["total_area_ha", "area_ha_*"]
 
 [layers.rename]
-
 "k_*" = "kharif_*"
 "kr_*" = "karif_rabi_*"
 "krz_*" = "kharif_rabi_zaid_*"
+"area_*" = "area_ha_*"
 geom = "geometry"
