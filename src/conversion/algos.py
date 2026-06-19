@@ -118,9 +118,14 @@ async def run_mws_pipeline(request: LayerConversionRequest) -> None:
     base_rename = {**base_descriptor.rename}
     base_rename.setdefault("geom", "geometry")
 
+    base_cols = base.collect_schema().names()
+    from src.conversion.helpers.cleaners import expand_rename_globs
+
+    expanded_base_rename = expand_rename_globs(base_cols, base_rename)
+
     base = (
         base.drop(base_descriptor.drop, strict=False)
-        .rename(base_rename, strict=False)
+        .rename(expanded_base_rename, strict=False)
         .with_columns(
             st.geom("geometry").st.set_srid(4326).st.to_wkb().alias("geometry")  # type: ignore[attr-defined]
         )
@@ -132,10 +137,16 @@ async def run_mws_pipeline(request: LayerConversionRequest) -> None:
     layer_results = await _process_layer(request, tehsils)
 
     logger.info("Post-processing and materializing layers")
+    dynamic_common_cols = list(COMMON_COLS)
+    if request.key not in dynamic_common_cols:
+        dynamic_common_cols.append(request.key)
+
     for layer in layer_results:
         layer_results[layer] = split_cols(layer_results[layer])
         layer_results[layer] = unnest_json_cols(layer_results[layer])
-        layer_results[layer] = prefix_cols(layer_results[layer], layer, COMMON_COLS)
+        layer_results[layer] = prefix_cols(
+            layer_results[layer], layer, dynamic_common_cols
+        )
 
         layer_path = f"{tmpdir}/{layer}.parquet"
         logger.info(f"Sinking layer '{layer}' to {layer_path}")
@@ -209,7 +220,7 @@ async def run_mws_pipeline(request: LayerConversionRequest) -> None:
     logger.info(f"Writing split Parquet outputs to {request.output_path}")
     all_cols = pl.scan_parquet(merged_path).collect_schema().names()
     await _write_split_parquets(
-        merged_path, request.output_path, all_cols, request.partition_by
+        merged_path, request.output_path, all_cols, request.key, request.partition_by
     )
 
     # Cleanup temp files
@@ -225,6 +236,7 @@ async def _write_split_parquets(
     merged_path: str,
     output_path: str,
     all_cols: list[str],
+    entity_key: str,
     partition_by: str | None = None,
 ) -> None:
     """Classify columns and write static, fortnightly, and annual Parquet files.
@@ -247,8 +259,10 @@ async def _write_split_parquets(
         partition_by (str | None): Optional outer Hive partition column name.
     """
     keep_always = [c for c in COMMON_COLS if c in all_cols]
+    if entity_key and entity_key not in keep_always and entity_key in all_cols:
+        keep_always.append(entity_key)
     if partition_by and partition_by not in keep_always:
-        keep_always = keep_always + [partition_by]
+        keep_always.append(partition_by)
     static_cols, fortnightly_cols, annual_cols = classify_columns(all_cols, keep_always)
 
     logger.info(

@@ -1,0 +1,27 @@
+# Descriptor for the Tehsil entity dataset.
+#
+# Source modes:
+#   Pan India layers  → type="item" + stac_item (schema/CRS) + source (S3 override)
+#   WFS layers        → type="collection" + sample_item (collection URL) + url_template (WFS URL construction)
+#
+# Resolution and temporal_pattern are auto-detected from STAC table:columns.
+
+
+entity = "waterbody"
+key = "wb_id"
+geometry = "geometry"
+base = "pan_india_waterbodies"
+
+
+[[layers]]
+name = "pan_india_waterbodies"
+type = "item"
+source = "s3://geo-benchmark-data/base_converted/waterbodies.parquet"
+drop = ["OGC_FID", "category_sq_m"]
+
+[layers.rename]
+
+"k_*" = "kharif_*"
+"kr_*" = "karif_rabi_*"
+"krz_*" = "kharif_rabi_zaid_*"
+geom = "geometry"

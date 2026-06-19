@@ -68,6 +68,33 @@ def clean_tehsils(response: pl.DataFrame) -> pl.LazyFrame:
     return df_tehsils.lazy()
 
 
+def expand_rename_globs(cols: list[str], rename_dict: dict[str, str]) -> dict[str, str]:
+    """Expand a dictionary with glob patterns into explicit column renames.
+
+    E.g., {"k_*": "kharif_*"} applied to ["k_2018", "k_2019"]
+    returns {"k_2018": "kharif_2018", "k_2019": "kharif_2019"}.
+    Non-glob exact matches are kept as is.
+    """
+    expanded = {}
+    for k, v in rename_dict.items():
+        if "*" in k:
+            parts = k.split("*")
+            if len(parts) == 2:
+                prefix, suffix = parts
+                pattern = re.compile(f"^{re.escape(prefix)}(.*){re.escape(suffix)}$")
+                for col in cols:
+                    m = pattern.match(col)
+                    if m:
+                        captured = m.group(1)
+                        new_col = v.replace("*", captured) if "*" in v else v
+                        expanded[col] = new_col
+            else:
+                expanded[k] = v
+        else:
+            expanded[k] = v
+    return expanded
+
+
 def rename_and_drop(
     layer: pl.LazyFrame, rename: dict[str, str], drop: list[str]
 ) -> pl.LazyFrame:
@@ -81,9 +108,11 @@ def rename_and_drop(
     Returns:
         The processed LazyFrame with lowercased column names.
     """
+    cols = layer.collect_schema().names()
+    expanded_rename = expand_rename_globs(cols, rename)
     return (
         layer.drop(drop, strict=False)
-        .rename(rename, strict=False)
+        .rename(expanded_rename, strict=False)
         .select(pl.all().name.to_lowercase())
     )
 
