@@ -36,6 +36,10 @@ def init_duckdb() -> DuckDBPyConnection:
             );""")
         conn.execute(f"SET memory_limit = '{settings.duckdb_memory_limit}'")
         conn.execute(f"SET threads = {settings.duckdb_threads}")
+        conn.execute(
+            f"SET temp_directory = '{settings.duckdb_temp_dir}_{random.randint(0, 10000)}'"
+        )
+        conn.execute("SET preserve_insertion_order = false")
 
         return conn
     except Exception as e:

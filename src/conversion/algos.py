@@ -119,9 +119,12 @@ async def run_mws_pipeline(request: LayerConversionRequest) -> None:
     base_rename.setdefault("geom", "geometry")
 
     base_cols = base.collect_schema().names()
+    logger.info(f"Base initial columns: {base_cols}")
     from src.conversion.helpers.cleaners import expand_rename_globs
 
     expanded_base_rename = expand_rename_globs(base_cols, base_rename)
+    logger.info(f"Base columns to drop: {base_descriptor.drop}")
+    logger.info(f"Base rename mapping: {expanded_base_rename}")
 
     base = (
         base.drop(base_descriptor.drop, strict=False)
@@ -130,10 +133,11 @@ async def run_mws_pipeline(request: LayerConversionRequest) -> None:
             st.geom("geometry").st.set_srid(4326).st.to_wkb().alias("geometry")  # type: ignore[attr-defined]
         )
     )
-    from src.conversion.helpers.cleaners import convert_m2_to_ha
+    logger.info(f"Base columns after rename/drop: {base.collect_schema().names()}")
+    from src.conversion.helpers.cleaners import apply_scaling
 
-    base = convert_m2_to_ha(base, base_descriptor.m2_to_ha)
-    base = base.collect(engine="streaming").lazy()
+    logger.info(f"Applying scale factors: {base_descriptor.scale}")
+    base = apply_scaling(base, base_descriptor.scale)
 
     logger.info("Processing layers")
     layer_results = await _process_layer(request, tehsils)
@@ -279,8 +283,10 @@ async def _write_split_parquets(
 
     conn = init_duckdb()
     try:
+        # VIEW = zero-copy; DuckDB pushes column selection down into the parquet
+        # scan so each COPY query only reads the columns it actually needs.
         conn.execute(
-            f"CREATE TABLE merged AS SELECT * FROM read_parquet('{merged_path}')"
+            f"CREATE VIEW merged AS SELECT * FROM read_parquet('{merged_path}')"
         )
 
         logger.info(f"Writing static GeoParquet → {output_path}/static/")
@@ -434,23 +440,24 @@ async def _write_static_geoparquet_duckdb(
 def _patch_geoparquet_metadata(parquet_file: Path) -> None:
     """Upgrade the GeoParquet ``geo`` metadata key inside a Parquet file.
 
-    Performs two upgrades in-place (via pyarrow schema-only rewrite):
+    Performs two upgrades in-place:
 
     * Bumps ``version`` from ``"1.0.0"`` → ``"1.1.0"``.
     * Injects a ``covering.bbox`` entry into the primary geometry column
       metadata, pointing to the ``bbox`` struct column's four child fields
       (``xmin``, ``ymin``, ``xmax``, ``ymax``).
 
-    The data pages are not re-encoded; only the Parquet file footer metadata
-    is updated, so the operation is very fast regardless of file size.
+    Data pages are streamed one row-group at a time so the full 15M-row
+    WKB geometry column is never loaded into RAM all at once.
 
     Args:
         parquet_file (Path): Path to the ``.parquet`` file to patch.
     """
+    tmp_path = parquet_file.with_suffix(".patching.parquet")
     try:
-        # Read full file to access schema + key-value metadata.
-        dataset = pq.read_table(str(parquet_file), memory_map=True)
-        kv_meta: dict[bytes, bytes] = dict(dataset.schema.metadata or {})
+        pf = pq.ParquetFile(str(parquet_file), memory_map=True)
+        old_schema = pf.schema_arrow
+        kv_meta: dict[bytes, bytes] = dict(old_schema.metadata or {})
 
         geo_key = b"geo"
         if geo_key not in kv_meta:
@@ -481,20 +488,30 @@ def _patch_geoparquet_metadata(parquet_file: Path) -> None:
             geo.setdefault("columns", {})[primary_col] = col_meta
 
         kv_meta[geo_key] = json.dumps(geo).encode()
+        new_schema = old_schema.with_metadata(kv_meta)
 
-        # Write back with updated schema metadata only (data unchanged).
-        new_schema = dataset.schema.with_metadata(kv_meta)
-        patched = dataset.cast(new_schema)
-        pq.write_table(
-            patched,
-            str(parquet_file),
+        # Stream row-groups one at a time — avoids loading the full WKB geometry
+        # column (multi-GB at 15.92M rows) into RAM.
+        # The ParquetWriter carries new_schema so the file-level kv_meta
+        # (including the updated 'geo' key) is written correctly on close().
+        writer = pq.ParquetWriter(
+            str(tmp_path),
+            new_schema,
             compression="zstd",
             compression_level=settings.parquet_compression_level,
-            row_group_size=settings.parquet_row_group_size,
             write_statistics=True,
         )
+        try:
+            n_groups = pf.metadata.num_row_groups
+            for i in range(n_groups):
+                writer.write_table(pf.read_row_group(i))
+        finally:
+            writer.close()
+
+        tmp_path.replace(parquet_file)
         logger.debug(f"Patched GeoParquet metadata on {parquet_file.name}")
     except Exception as exc:
+        tmp_path.unlink(missing_ok=True)
         logger.warning(
             f"Failed to patch GeoParquet metadata on {parquet_file.name}: {exc}"
         )
@@ -535,9 +552,10 @@ def _write_temporal_parquet_polars(
 ) -> None:
     """Write melted temporal (fortnightly or annual) output using Polars.
 
-    Groups columns by their date/year suffix, constructs a stacked LazyFrame that
-    emits one row per (mws_id, date/year) and writes directly to partitioned
-    Parquet files using Polars write_parquet.
+    Groups columns by their date/year suffix. Each time-period slice is sunk
+    to a temporary Parquet file individually, avoiding an N × 15M-row concat
+    plan that would OOM on large datasets. The per-slice files are then scanned
+    and re-sunk with Hive partitioning in a single streaming pass.
 
     Args:
         merged_path (str): Path to the local merged Parquet file.
@@ -557,7 +575,6 @@ def _write_temporal_parquet_polars(
         return
 
     lf = pl.scan_parquet(merged_path)
-    lazy_frames: list[pl.LazyFrame] = []
 
     # Keep track of variable order for the final projection
     all_vars_ordered: list[str] = []
@@ -566,25 +583,6 @@ def _write_temporal_parquet_polars(
             if var not in all_vars_ordered:
                 all_vars_ordered.append(var)
 
-    for time_val, var_map in groups.items():
-        exprs = [pl.col(c) for c in keep_cols]
-        if kind == "fortnightly":
-            exprs.append(
-                pl.lit(time_val).str.strptime(pl.Date, "%Y-%m-%d").alias("date")
-            )
-            exprs.append(pl.lit(int(time_val[:4])).cast(pl.Int32).alias("year"))
-        else:
-            first_year = _FIRST_YEAR_RE.search(time_val)
-            year_val = int(first_year.group()) if first_year else 0
-            exprs.append(pl.lit(year_val).cast(pl.Int32).alias("year"))
-
-        for var, orig_col in var_map.items():
-            exprs.append(pl.col(orig_col).alias(var))
-
-        lazy_frames.append(lf.select(exprs))
-
-    final_lf = pl.concat(lazy_frames, how="diagonal_relaxed")
-
     # Enforce strict column ordering
     all_final_cols = keep_cols.copy()
     if kind == "fortnightly":
@@ -592,8 +590,6 @@ def _write_temporal_parquet_polars(
     else:
         all_final_cols.append("year")
     all_final_cols.extend(all_vars_ordered)
-
-    final_lf = final_lf.select(all_final_cols)
 
     partition_cols = []
     if partition_by:
@@ -610,18 +606,53 @@ def _write_temporal_parquet_polars(
         write_target = str(tmp_local)
     else:
         tmp_local = None
-        write_target = Path(base_path).expanduser()
-        write_target.mkdir(parents=True, exist_ok=True)
+        write_target = str(Path(base_path).expanduser())
+        Path(write_target).mkdir(parents=True, exist_ok=True)
 
-    logger.debug(f"Collecting {kind} frame and writing to {write_target} via Polars")
-    # final_df = final_lf.collect(engine="streaming")
+    # Sink each time-period slice to its own temp parquet individually.
+    # This avoids building one giant concat plan (N slices × 15.92M rows)
+    # that would materialise everything in RAM before the sink can drain it.
+    slices_tmp = Path(tempfile.mkdtemp(prefix=f"{kind}_slices_"))
+    slice_paths: list[str] = []
+    try:
+        for time_val, var_map in groups.items():
+            exprs = [pl.col(c) for c in keep_cols]
+            if kind == "fortnightly":
+                exprs.append(
+                    pl.lit(time_val).str.strptime(pl.Date, "%Y-%m-%d").alias("date")
+                )
+                exprs.append(pl.lit(int(time_val[:4])).cast(pl.Int32).alias("year"))
+            else:
+                first_year = _FIRST_YEAR_RE.search(time_val)
+                year_val = int(first_year.group()) if first_year else 0
+                exprs.append(pl.lit(year_val).cast(pl.Int32).alias("year"))
 
-    final_lf.sink_parquet(
-        pl.PartitionBy(write_target, key=partition_cols),
-        compression="zstd",
-        compression_level=settings.parquet_compression_level,
-        row_group_size=settings.parquet_row_group_size,
-    )
+            for var, orig_col in var_map.items():
+                exprs.append(pl.col(orig_col).alias(var))
+
+            safe_time = time_val.replace("-", "_").replace("/", "_")
+            slice_path = str(slices_tmp / f"slice_{safe_time}.parquet")
+            logger.debug(f"Sinking {kind} slice '{time_val}' → {slice_path}")
+            lf.select(exprs).sink_parquet(
+                slice_path,
+                compression="zstd",
+                compression_level=settings.parquet_compression_level,
+                row_group_size=settings.parquet_row_group_size,
+            )
+            slice_paths.append(slice_path)
+
+        # Scan all per-slice files (already on disk, narrow columns) and
+        # partition-sink in one streaming pass.
+        logger.debug(f"Writing {kind} frame to {write_target} via Polars")
+        pl.scan_parquet(slice_paths).select(all_final_cols).sink_parquet(
+            pl.PartitionBy(write_target, key=partition_cols),
+            compression="zstd",
+            compression_level=settings.parquet_compression_level,
+            row_group_size=settings.parquet_row_group_size,
+        )
+    finally:
+        shutil.rmtree(slices_tmp, ignore_errors=True)
+
     logger.info(f"{kind.capitalize()} output written to {write_target}")
 
     if is_s3 and tmp_local is not None:

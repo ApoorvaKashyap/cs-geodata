@@ -1,6 +1,5 @@
 import json
 import re
-import fnmatch
 
 import polars as pl
 
@@ -74,25 +73,31 @@ def expand_rename_globs(cols: list[str], rename_dict: dict[str, str]) -> dict[st
 
     E.g., {"k_*": "kharif_*"} applied to ["k_2018", "k_2019"]
     returns {"k_2018": "kharif_2018", "k_2019": "kharif_2019"}.
-    Non-glob exact matches are kept as is.
+    Non-glob exact matches are kept as is, but are matched case-insensitively.
     """
     expanded = {}
+    col_lower_map = {c.lower(): c for c in cols}
+
     for k, v in rename_dict.items():
-        if "*" in k:
-            parts = k.split("*")
+        k_lower = k.lower()
+        if "*" in k_lower:
+            parts = k_lower.split("*")
             if len(parts) == 2:
                 prefix, suffix = parts
-                pattern = re.compile(f"^{re.escape(prefix)}(.*){re.escape(suffix)}$")
+                pattern = re.compile(
+                    f"^{re.escape(prefix)}(.*){re.escape(suffix)}$", re.IGNORECASE
+                )
                 for col in cols:
                     m = pattern.match(col)
                     if m:
                         captured = m.group(1)
                         new_col = v.replace("*", captured) if "*" in v else v
                         expanded[col] = new_col
+        else:
+            if k_lower in col_lower_map:
+                expanded[col_lower_map[k_lower]] = v
             else:
                 expanded[k] = v
-        else:
-            expanded[k] = v
     return expanded
 
 
@@ -118,22 +123,35 @@ def rename_and_drop(
     )
 
 
-def convert_m2_to_ha(layer: pl.LazyFrame, cols_to_convert: list[str]) -> pl.LazyFrame:
-    """Divide matching columns by 10,000 to convert m2 to hectares.
+def apply_scaling(layer: pl.LazyFrame, scale_dict: dict[str, float]) -> pl.LazyFrame:
+    """Multiply matching columns by the specified factor.
 
-    Supports glob patterns in cols_to_convert.
+    Supports glob patterns in scale_dict keys.
     """
-    if not cols_to_convert:
+    if not scale_dict:
         return layer
 
     schema_cols = layer.collect_schema().names()
+    col_to_factor = {}
 
-    matched_cols = set()
-    for pattern in cols_to_convert:
-        matched_cols.update(fnmatch.filter(schema_cols, pattern))
+    for pattern, factor in scale_dict.items():
+        # Use case-insensitive matching just in case
+        for c in schema_cols:
+            import fnmatch
 
-    if matched_cols:
-        exprs = [(pl.col(c) / 10000.0).alias(c) for c in matched_cols]
+            if fnmatch.fnmatch(c.lower(), pattern.lower()):
+                col_to_factor[c] = factor
+
+    if col_to_factor:
+        from loguru import logger
+
+        logger.info(
+            f"apply_scaling: successfully applying scale factors: {col_to_factor}"
+        )
+        exprs = [
+            (pl.col(c).cast(pl.Float64, strict=False) * factor).alias(c)
+            for c, factor in col_to_factor.items()
+        ]
         return layer.with_columns(exprs)
 
     return layer

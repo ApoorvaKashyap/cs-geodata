@@ -41,7 +41,7 @@ async def _create_tehsil_map(
             descriptor.url_template,
             descriptor.rename,
             descriptor.drop,
-            descriptor.m2_to_ha,
+            descriptor.scale,
             job_timeout=3600,
         )
         tmap[f"{descriptor.name}_{state_slug}_{district_slug}_{tehsil_slug}"] = task

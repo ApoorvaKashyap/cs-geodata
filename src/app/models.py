@@ -41,9 +41,9 @@ class LayerDescriptor(BaseModel):
     rename: dict[str, str] = Field(
         default_factory=dict, description="Column rename mapping."
     )
-    m2_to_ha: list[str] = Field(
-        default_factory=list,
-        description="List of columns (or globs) to convert from m2 to hectares (divided by 10000).",
+    scale: dict[str, float] = Field(
+        default_factory=dict,
+        description="Dictionary mapping column names (or globs) to a multiplication factor.",
     )
     resolution: str | None = Field(
         default=None,

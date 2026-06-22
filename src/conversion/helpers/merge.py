@@ -40,6 +40,14 @@ def merge_all_layers(
             "Base layer missing 'area_in_ha' column — proceeding without it."
         )
 
+    # Force join keys to string to prevent datatype mismatches (e.g. i32 vs str)
+    base = base.with_columns(pl.col(entity_key).cast(pl.Utf8))
+    for layer_name, layer_df in layer_results.items():
+        if entity_key in layer_df.collect_schema().names():
+            layer_results[layer_name] = layer_df.with_columns(
+                pl.col(entity_key).cast(pl.Utf8)
+            )
+
     logger.info("Extracting location metadata from layers")
     location_meta = _extract_location_meta(layer_results, entity_key=entity_key)
     base = base.join(location_meta, on=entity_key, how="left")
@@ -151,7 +159,7 @@ def _extract_location_meta(
                 subset=[entity_key]
             )
 
-            count = meta.collect(engine="streaming").height
+            count = meta.select(pl.len()).collect()[0, 0]
             logger.info(
                 f"Location metadata: {count} unique {entity_key} pairs from '{layer_name}'"
             )

@@ -38,8 +38,9 @@ class Settings(BaseSettings):
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
     # DuckDB
-    duckdb_memory_limit: str = "4GB"
+    duckdb_memory_limit: str = "12GB"
     duckdb_threads: int = 4
+    duckdb_temp_dir: str = "/tmp/duckdb_spill"
 
     # Parquet Output Configuration
     parquet_row_group_size: int = 100000

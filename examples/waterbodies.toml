@@ -11,18 +11,24 @@ entity = "waterbody"
 key = "wb_id"
 geometry = "geometry"
 base = "pan_india_waterbodies"
+partition_by = "ba_name"
 
 
 [[layers]]
 name = "pan_india_waterbodies"
 type = "item"
-source = "s3://geo-benchmark-data/base_converted/waterbodies.parquet"
+source = "/home/akashyap/Finals/waterbodies.parquet"
 drop = ["OGC_FID", "category_sq_m"]
-m2_to_ha = ["total_area_ha", "area_ha_*"]
+
+[layers.scale]
+area_in_ha = 0.0001
+"area_ha_*" = 0.0001
 
 [layers.rename]
+total_area_m2 = "area_in_ha"
 "k_*" = "kharif_*"
 "kr_*" = "karif_rabi_*"
 "krz_*" = "kharif_rabi_zaid_*"
 "area_*" = "area_ha_*"
 geom = "geometry"
+basin = "ba_name"
