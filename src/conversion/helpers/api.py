@@ -244,14 +244,18 @@ def _convert_base_sync(
             conn.execute(f"""
                 COPY (
                     SELECT
-                        b.* EXCLUDE (_geom),
+                        b.* EXCLUDE (_geom, _rn),
                         s.{super_field}
                     FROM (
-                        SELECT *, ST_GeomFromWKB(geom) AS _geom
+                        SELECT
+                            *,
+                            ST_GeomFromWKB(geom) AS _geom,
+                            ROW_NUMBER() OVER () AS _rn
                         FROM parquet_scan('{tmp_path}')
                     ) b
                     LEFT JOIN _super s
                         ON ST_Within(ST_Centroid(b._geom), s._poly)
+                    ORDER BY b._rn
                 )
                 TO '{output_path}'
                 WITH (FORMAT 'PARQUET', COMPRESSION 'ZSTD', COMPRESSION_LEVEL {settings.parquet_compression_level}, ROW_GROUP_SIZE {settings.parquet_row_group_size});

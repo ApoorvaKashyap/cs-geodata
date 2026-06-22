@@ -102,6 +102,14 @@ class LayerConversionRequest(BaseModel):
             "All output Parquet files are partitioned on this column. Optional."
         ),
     )
+    add_admin: bool = Field(
+        default=False,
+        description=(
+            "When True, run a centroid-in-polygon spatial join against the tehsil "
+            "boundaries to populate state, district, and tehsil for every row that "
+            "currently has null admin columns. Rows already populated are skipped."
+        ),
+    )
     layers: list[LayerDescriptor] = Field(default_factory=list)
 
     @model_validator(mode="after")

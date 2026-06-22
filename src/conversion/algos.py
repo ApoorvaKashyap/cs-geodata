@@ -216,12 +216,26 @@ async def run_mws_pipeline(request: LayerConversionRequest) -> None:
     merged = pl.scan_parquet(merged_path)
 
     # Fill admin boundaries for polygons outside active tehsils
-    if missing_df.height > 0:
+    if missing_df.height > 0 or request.add_admin:
         logger.info("Adding State, District and Tehsil Data")
         merged = fill_missing_admin_boundaries(
             merged,
             tehsils_path=settings.tehsil_bounds,
+            entity_key=request.key,
         )
+
+        # Overwrite the temp merged file so DuckDB output picks up the admin columns
+        logger.info(f"Sinking admin-filled merged frame back to {merged_path}")
+        tmp_admin_path = f"{merged_path}.admin.tmp"
+        merged.sink_parquet(
+            tmp_admin_path,
+            compression="zstd",
+            compression_level=settings.parquet_compression_level,
+            row_group_size=settings.parquet_row_group_size,
+        )
+        import shutil
+
+        shutil.move(tmp_admin_path, merged_path)
 
     logger.info(f"Writing split Parquet outputs to {request.output_path}")
     all_cols = pl.scan_parquet(merged_path).collect_schema().names()

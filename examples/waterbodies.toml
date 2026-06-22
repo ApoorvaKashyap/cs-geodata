@@ -12,7 +12,7 @@ key = "wb_id"
 geometry = "geometry"
 base = "pan_india_waterbodies"
 partition_by = "ba_name"
-
+add_admin = true
 
 [[layers]]
 name = "pan_india_waterbodies"

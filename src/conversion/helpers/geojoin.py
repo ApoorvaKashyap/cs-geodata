@@ -9,10 +9,11 @@ BATCH_SIZE = 25_000
 def fill_missing_admin_boundaries(
     merged: pl.LazyFrame,
     tehsils_path: str,
+    entity_key: str = "mws_id",
 ) -> pl.LazyFrame:
     """Fill missing administrative boundaries using a spatial join.
 
-    Performs a point-in-polygon spatial join between the centroids of MWS polygons
+    Performs a point-in-polygon spatial join between the centroids of Entity polygons
     (that lack admin data) and the tehsil boundaries. Batches the operation to
     avoid memory limits in DuckDB.
 
@@ -27,17 +28,17 @@ def fill_missing_admin_boundaries(
     logger.info("Loading tehsil boundaries")
 
     # Treat both nulls and empty/whitespace strings as missing admin data
-    is_missing = pl.col("state").is_null() | (pl.col("state").cast(pl.String).str.strip_chars() == "")
+    is_missing = pl.col("state").is_null() | (
+        pl.col("state").cast(pl.String).str.strip_chars() == ""
+    )
     has_admin = merged.filter(~is_missing)
     needs_admin = merged.filter(is_missing)
 
     # Only collect the columns needed for the spatial join (lightweight)
-    join_keys = needs_admin.select(["mws_id", "geometry"]).collect(
-        engine="streaming"
-    )
+    join_keys = needs_admin.select([entity_key, "geometry"]).collect(engine="streaming")
 
     row_count = join_keys.height
-    logger.info(f"Filling admin boundaries for {row_count} MWS polygons")
+    logger.info(f"Filling admin boundaries for {row_count} entity polygons")
 
     if row_count == 0:
         logger.info("No missing admin boundaries — skipping spatial join")
@@ -71,15 +72,15 @@ def fill_missing_admin_boundaries(
 
             conn.register("batch_table", batch.to_arrow())
 
-            sql = """
+            sql = f"""
                 SELECT
-                    b.mws_id,
+                    b.{entity_key},
                     t.state,
                     t.district,
                     t.tehsil
                 FROM (
                     SELECT
-                        mws_id,
+                        {entity_key},
                         ST_Centroid(ST_GeomFromWKB(geometry)) AS centroid
                     FROM batch_table
                 ) b
@@ -117,7 +118,7 @@ def fill_missing_admin_boundaries(
         # Deduplicate: centroids on tehsil boundaries can match
         # multiple tehsils via ST_Within, producing 2 rows per polygon
         pre_dedup = admin_lookup.height
-        admin_lookup = admin_lookup.unique(subset=["mws_id"])
+        admin_lookup = admin_lookup.unique(subset=[entity_key])
         deduped = pre_dedup - admin_lookup.height
         if deduped > 0:
             logger.info(f"Removed {deduped} boundary-overlap duplicates")
@@ -134,7 +135,7 @@ def fill_missing_admin_boundaries(
     # (avoids materializing 2584 columns during spatial join)
     filled = needs_admin.drop(["state", "district", "tehsil"]).join(
         admin_lookup.lazy(),
-        on="mws_id",
+        on=entity_key,
         how="left",
     )
 
