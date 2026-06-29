@@ -229,3 +229,4 @@ logs/
 .temp/
 *.parquet
 *.csv
+geodata-api/

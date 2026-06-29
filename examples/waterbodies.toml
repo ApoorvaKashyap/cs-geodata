@@ -17,7 +17,7 @@ add_admin = true
 [[layers]]
 name = "pan_india_waterbodies"
 type = "item"
-source = "/home/akashyap/Finals/waterbodies.parquet"
+source = "/home/apoorva/Finals/base_converted/new_wb.parquet"
 drop = ["OGC_FID", "category_sq_m"]
 
 [layers.scale]

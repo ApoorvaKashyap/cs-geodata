@@ -42,6 +42,23 @@ _DATE_SUFFIX_RE = re.compile(r"(\d{1,4}-\d{1,2}-\d{1,4})$")
 # Regex used to extract the trailing year / year-range from an annual column name
 _YEAR_SUFFIX_RE = re.compile(r"(\d{4}[_-]\d{4}|\d{4})$")
 
+# Numeric sort key for resolving the widest dtype when the same variable has
+# different types across time periods (e.g. Int32 vs Float64).
+_DTYPE_RANK: dict[type, int] = {
+    pl.Boolean: 0,
+    pl.Int8: 1,
+    pl.Int16: 2,
+    pl.Int32: 3,
+    pl.Int64: 4,
+    pl.Float32: 5,
+    pl.Float64: 6,
+}
+
+
+def _dtype_sort_key(dt: pl.DataType) -> int:
+    """Return a numeric rank for *dt* so that ``max()`` picks the widest type."""
+    return _DTYPE_RANK.get(type(dt), 6)  # default to Float64 rank
+
 
 async def run_mws_pipeline(request: LayerConversionRequest) -> None:
     """Run the main MWS data pipeline to merge layers onto a base dataset.
@@ -589,13 +606,31 @@ def _write_temporal_parquet_polars(
         return
 
     lf = pl.scan_parquet(merged_path)
+    lf_schema = lf.collect_schema()
 
-    # Keep track of variable order for the final projection
+    # Keep track of variable order for the final projection.
+    # The same variable can appear with different dtypes across time periods
+    # (e.g. Int32 for one date, Float64 for another) so we resolve the widest
+    # supertype per variable and cast every slice to it.
     all_vars_ordered: list[str] = []
+    _var_all_dtypes: dict[str, list[pl.DataType]] = {}
     for var_map in groups.values():
-        for var in var_map.keys():
+        for var, orig_col in var_map.items():
             if var not in all_vars_ordered:
                 all_vars_ordered.append(var)
+                _var_all_dtypes.setdefault(var, []).append(lf_schema[orig_col])
+            else:
+                _var_all_dtypes[var].append(lf_schema[orig_col])
+
+    var_dtypes: dict[str, pl.DataType] = {}
+    for var, dtypes in _var_all_dtypes.items():
+        resolved = dtypes[0]
+        for dt in dtypes[1:]:
+            try:
+                resolved = max(resolved, dt, key=lambda d: _dtype_sort_key(d))
+            except Exception:
+                resolved = pl.Float64  # safe fallback for numeric data
+        var_dtypes[var] = resolved
 
     # Enforce strict column ordering
     all_final_cols = keep_cols.copy()
@@ -641,8 +676,12 @@ def _write_temporal_parquet_polars(
                 year_val = int(first_year.group()) if first_year else 0
                 exprs.append(pl.lit(year_val).cast(pl.Int32).alias("year"))
 
-            for var, orig_col in var_map.items():
-                exprs.append(pl.col(orig_col).alias(var))
+            for var in all_vars_ordered:
+                target_dt = var_dtypes[var]
+                if var in var_map:
+                    exprs.append(pl.col(var_map[var]).cast(target_dt).alias(var))
+                else:
+                    exprs.append(pl.lit(None, dtype=target_dt).alias(var))
 
             safe_time = time_val.replace("-", "_").replace("/", "_")
             slice_path = str(slices_tmp / f"slice_{safe_time}.parquet")
