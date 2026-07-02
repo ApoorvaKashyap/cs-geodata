@@ -171,7 +171,7 @@ def _extract_location_meta(
     )
 
 
-def _get_missing_mws_ids(
+def _get_missing_entity_ids(
     base: pl.LazyFrame,
     layer_results: dict[str, pl.LazyFrame],
     entity_key: str = "mws_id",

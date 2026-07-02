@@ -17,6 +17,10 @@ from src.utils.configs import settings
 async def get_active() -> pl.DataFrame:
     """Fetch the list of active locations from the CoreStack API.
 
+    .. warning::
+        This function is currently unused. Active locations are now fetched via
+        S3 version manifests instead of the CoREStack API.
+
     Returns:
         pl.DataFrame: A polars DataFrame containing the active locations JSON response.
     """
@@ -189,7 +193,7 @@ def _convert_base_sync(
     single-step Hilbert-sort COPY.
 
     The geometry column is kept as ``geom`` (WKB binary) so that the
-    existing pipeline rename ``geom -> geometry`` in ``run_mws_pipeline``
+    existing pipeline rename ``geom -> geometry`` in ``run_pipeline``
     continues to work unchanged.
 
     Args:

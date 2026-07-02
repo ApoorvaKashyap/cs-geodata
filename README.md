@@ -1,60 +1,55 @@
-# CoREStack GeoData Converter
+# cs-geodata
 
-A high-performance pipeline for converting and merging CoREStack spatial data into cloud-native formats like GeoParquet.
+A converter for CoREStack data to cloud-native forms.
 
-## Features
+## Overview
 
-- **Asynchronous Data Fetching**: Pulls GeoJSON layers from GeoServer concurrently using `asyncio` and `rq` queues.
-- **Batched Spatial Joins**: Uses DuckDB's spatial extension for fast, memory-efficient point-in-polygon joins to assign administrative boundaries.
-- **Cloud-Native Output**: Writes to partitioned GeoParquet 1.1.0 (by state) optimized for analytical queries (ZSTD compression, row groups).
-- **Data Deduplication & Normalization**: Handles overlapping polygons, range-based strings (e.g. "30 - 200"), and nested JSON columns automatically.
+This project provides a FastAPI-based REST API and a background worker system (using RQ and Redis) to convert geographical data into cloud-native formats. It leverages high-performance data processing libraries like DuckDB, Polars, and GeoPandas.
 
-## Workflow Architecture
+## Architecture
 
-1. **Initialization**: Fetches active tehsils and the authoritative layer version metadata.
-2. **Base Conversion**: Downloads the base MWS layer and converts it to Parquet for fast processing.
-3. **Layer Fetching**: Queues tasks to download GeoJSONs for each requested layer per active tehsil.
-4. **Processing**: Merges tehsil-level GeoJSONs, cleans/normalizes columns, and splits complex attributes (ranges, JSON).
-5. **Merging**: Left-joins all processed layers onto the base MWS dataset.
-6. **Admin Fill**: Performs a DuckDB-powered spatial join to assign missing state/district/tehsil data for polygons spanning boundaries.
-7. **Sink**: Partitions the merged data by state and writes GeoParquet 1.1.0 files with correct global bounding box metadata.
+* **App**: A FastAPI application that serves the REST endpoints.
+* **Workers**: Background worker processes that handle the heavy lifting of data conversion.
+* **Redis**: Used as a message broker for the work queue.
 
-## Usage
+## Getting Started
 
-### 1. Configuration
-The pipeline is driven by a configuration descriptor which can be defined in TOML or JSON format. See `examples/mws.toml` for a complete example.
+### Prerequisites
 
-Key parameters in the configuration:
-- `entity`: The base entity name (e.g., `mws`).
-- `base`: The base boundaries layer source.
-- `active_locations`: S3 path to the layer version metadata CSV.
-- `layers`: A list of attribute/temporal layers to merge. Each layer specifies its `type` (e.g., `collection`), `url_template`, columns to `drop`, and a `rename` mapping.
+* Docker
+* Docker Compose
 
-### 2. Running the Pipeline
-You can run the pipeline by loading your JSON configuration and passing it into the `run_mws_pipeline` function. Ensure your Redis/RQ workers are running if processing WFS layers concurrently.
+### Running Locally
 
-```python
-import asyncio
-import json
-from src.app.models import LayerConversionRequest
-from src.conversion.algos import run_mws_pipeline
-from loguru import logger
+You can spin up the entire application stack using Docker Compose:
 
-if __name__ == "__main__":
-    logger.add("logs/mws.log")
-
-    # Load configuration
-    with open("examples/mws.json") as f:
-        config_data = json.load(f)
-
-    request = LayerConversionRequest(**config_data)
-
-    # Run pipeline
-    asyncio.run(run_mws_pipeline(request))
+```bash
+docker compose up -d --build
 ```
 
-### 3. Output
-The pipeline produces three output types partitioned by your specified `partition_by` column (e.g., `sub_basin`):
-- `static/`: Base geometry and non-temporal attributes (GeoParquet).
-- `fortnightly/`: Melted temporal data (if applicable), partitioned by year.
-- `annual/`: Melted annual data (if applicable), partitioned by year.
+This will start the following services:
+* `redis`: The Redis message broker.
+* `workers`: The background worker processes.
+* `app`: The FastAPI application, accessible at http://localhost:8000.
+
+### Development
+
+The `compose.yaml` is configured with `watch` enabled for active development.
+* Changes to Python files will automatically sync and restart the application.
+* Changes to `pyproject.toml` will rebuild the application.
+
+If you are running outside of Docker for development, you can use `uv` (as the project uses `uv.lock`) or `pip` to install dependencies from `pyproject.toml`.
+
+## API Endpoints
+
+* `GET /`: Health check to verify Redis connection and worker status.
+* `GET /api/v1/status?task_id={id}`: Get the status of a specific background job.
+* `POST /api/v1/vector/layers`: Submit a request to convert vector layers.
+* `POST /api/v1/vector/create_base_cache`: Submit a request to create a base cache for layers.
+
+## Tech Stack
+
+* **Web Framework**: FastAPI, Uvicorn
+* **Data Processing**: DuckDB, Polars, GeoPandas
+* **Task Queue**: RQ, Redis
+* **Cloud Storage**: Boto3, S3FS

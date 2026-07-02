@@ -19,7 +19,7 @@ from src.conversion.helpers.cleaners import (
 from src.conversion.helpers.duckdb_funcs import init_duckdb
 from src.conversion.helpers.geojoin import fill_missing_admin_boundaries
 from src.conversion.helpers.merge import (
-    _get_missing_mws_ids,
+    _get_missing_entity_ids,
     merge_all_layers,
 )
 from src.conversion.helpers.scheduler import get_all_geojsons, poll_completion
@@ -60,8 +60,8 @@ def _dtype_sort_key(dt: pl.DataType) -> int:
     return _DTYPE_RANK.get(type(dt), 6)  # default to Float64 rank
 
 
-async def run_mws_pipeline(request: LayerConversionRequest) -> None:
-    """Run the main MWS data pipeline to merge layers onto a base dataset.
+async def run_pipeline(request: LayerConversionRequest) -> None:
+    """Run the main data pipeline to merge attribute layers onto a base entity dataset.
 
     This function fetches tehsils filtered by the requested version range,
     downloads the base layer, processes requested additional layers, merges
@@ -69,8 +69,8 @@ async def run_mws_pipeline(request: LayerConversionRequest) -> None:
     into three flat Parquet files:
 
     * ``static.parquet``   — geometry + identity + non-temporal attributes
-    * ``fortnightly/``     — melted long, one row per (mws_id, date), partitioned by year
-    * ``annual/``          — melted long, one row per (mws_id, year), partitioned by year
+    * ``fortnightly/``     — melted long, one row per (entity_key, date), partitioned by year
+    * ``annual/``          — melted long, one row per (entity_key, year), partitioned by year
 
     Args:
         request (LayerConversionRequest): Configuration for the pipeline run, including layers, paths,
@@ -183,7 +183,7 @@ async def run_mws_pipeline(request: LayerConversionRequest) -> None:
         logger.info(f"Layer '{layer}' materialized")
 
     # Log coverage
-    missing = _get_missing_mws_ids(base, layer_results, entity_key=request.key)
+    missing = _get_missing_entity_ids(base, layer_results, entity_key=request.key)
     missing_df = missing.collect(engine="streaming")
     if missing_df.height > 0:
         logger.warning(
@@ -851,7 +851,7 @@ async def _fetch_base(
     super_layer_source: str | None = None,
     super_field: str | None = None,
 ) -> pl.LazyFrame:
-    """Fetch the base MWS layer, converting it to Parquet if needed.
+    """Fetch the base layer, converting it to Parquet if needed.
 
     When *super_layer_source* and *super_field* are provided, a
     centroid-in-polygon spatial join is also performed during conversion
@@ -890,8 +890,8 @@ async def _fetch_base(
 
 
 if __name__ == "__main__":
-    logger.add("logs/mws.log")
+    logger.add("logs/pipeline.log")
     with open("examples/mws.json") as f:
         request = json.load(f)
     request = LayerConversionRequest(**request)
-    asyncio.run(run_mws_pipeline(request))
+    asyncio.run(run_pipeline(request))

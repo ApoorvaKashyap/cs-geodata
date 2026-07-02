@@ -1,7 +1,7 @@
 from loguru import logger
 
 from src.app.models import BaseLayers, ConversionRequest, load_descriptor
-from src.conversion.algos import run_mws_pipeline
+from src.conversion.algos import run_pipeline
 from src.conversion.helpers.api import convert_base
 from src.work.work_queue import bq, lq
 
@@ -34,7 +34,7 @@ def layer_conversion(request: ConversionRequest) -> None:
     try:
         import asyncio
 
-        asyncio.run(run_mws_pipeline(full_request))
+        asyncio.run(run_pipeline(full_request))
         logger.info(f"Layer conversion complete -> {request.output_path}")
     except Exception as e:
         logger.error(f"Layer conversion failed: {e}")

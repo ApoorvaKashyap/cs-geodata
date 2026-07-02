@@ -13,12 +13,15 @@ def fill_missing_admin_boundaries(
 ) -> pl.LazyFrame:
     """Fill missing administrative boundaries using a spatial join.
 
-    Performs a point-in-polygon spatial join between the centroids of Entity polygons
+    .. todo::
+        Update this function to return a list of tehsils per entity.
+
+    Performs a point-in-polygon spatial join between the centroids of entity polygons
     (that lack admin data) and the tehsil boundaries. Batches the operation to
     avoid memory limits in DuckDB.
 
     Args:
-        merged: LazyFrame containing the merged MWS data.
+        merged: LazyFrame containing the merged entity data.
         tehsils_path: Path to the raw tehsil boundaries shapefile/geopackage.
 
     Returns:
@@ -111,8 +114,8 @@ def fill_missing_admin_boundaries(
             lookup_frames.append(batch_lookup)
             conn.unregister("batch_table")
 
-        # Concat the lightweight lookup (only 5 columns: mws_id, version,
-        # state, district, tehsil) — ~253K × 5 instead of ~253K × 2584
+        # Concat the lightweight lookup (only 4 columns: entity_key,
+        # state, district, tehsil) — narrow frame instead of full merged width
         admin_lookup = pl.concat(lookup_frames, how="diagonal_relaxed")
 
         # Deduplicate: centroids on tehsil boundaries can match

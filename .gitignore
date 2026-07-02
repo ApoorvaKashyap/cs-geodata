@@ -230,3 +230,4 @@ logs/
 *.parquet
 *.csv
 geodata-api/
+autoapi/

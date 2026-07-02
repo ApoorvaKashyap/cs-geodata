@@ -26,7 +26,8 @@ def clean_label(label: str) -> str:
     Returns:
         The cleaned label string.
 
-    Examples:
+    Examples::
+
         "Raipur District"  -> "raipur_district"
         "North-East Delhi" -> "north_east_delhi"
         "  Pune  "         -> "pune"
@@ -161,9 +162,10 @@ def get_layer_prefix(layer: str) -> str:
     """Derive a short 2-character prefix for each layer name.
 
     Rules (in order):
-        "annual_balance"  -> first char of each part joined by "_"  -> "ab_"
-        "water-balance"   -> first char of each part joined by "-"  -> "wb_"
-        "aquifer"         -> first two chars + "_"                  -> "aq_"
+
+    - ``"annual_balance"`` → first char of each ``"_"``-separated part → ``"ab_"``
+    - ``"water-balance"``  → first char of each ``"-"``-separated part → ``"wb_"``
+    - ``"aquifer"``        → first two chars + ``"_"``                 → ``"aq_"``
 
     Args:
         layer: The full layer name.
@@ -392,6 +394,7 @@ def classify_columns(
     """Classify merged-frame column names into static, fortnightly, and annual buckets.
 
     Classification rules (applied in order):
+
     1. Columns in *keep_always* → static (identity / common columns).
     2. Columns whose name contains the substring ``"net"`` → dropped entirely
        (they hold derived data that is not needed downstream).
