@@ -5,7 +5,7 @@ from rq import Queue
 from src.utils.redis_client import get_redis_client
 
 
-def _make_queues() -> tuple[Queue, Queue, Queue, Queue]:
+def _make_queues() -> tuple[Queue, Queue, Queue]:
     """Initialise the RQ queues, raising on connection failure.
 
     Raises:
@@ -15,22 +15,19 @@ def _make_queues() -> tuple[Queue, Queue, Queue, Queue]:
         client = get_redis_client()
         client.ping()  # fail fast — give a clear error instead of a silent hang
         layers_queue = Queue("layers", connection=client)
-        id_queue = Queue("id", connection=client)
         base_queue = Queue("base", connection=client)
         meta_queue = Queue("meta", connection=client)
-        return layers_queue, id_queue, base_queue, meta_queue
+        return layers_queue, base_queue, meta_queue
     except RedisConnectionError as exc:
         logger.error("Failed to connect to Redis: %s", exc)
         raise
 
 
-lq, iq, bq, mq = _make_queues()
+lq, bq, mq = _make_queues()
 
 
 async def get_status(task_id: str) -> dict[str, str]:
     task = lq.fetch_job(task_id)
-    if not task:
-        task = iq.fetch_job(task_id)
     if not task:
         task = bq.fetch_job(task_id)
     if not task:

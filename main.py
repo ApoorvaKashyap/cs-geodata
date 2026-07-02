@@ -31,20 +31,20 @@ async def read_root() -> dict[str, str]:
             "message": "Redis connection or worker status check failed",
         }
     workers = check_worker_status()
-    if len(workers["id"]) == 0:
+
+    missing_queues = [q for q, w in workers.items() if len(w) == 0]
+    if missing_queues:
         return {
             "status": "error",
-            "message": "No ID workers running",
+            "message": f"No workers running for queues: {', '.join(missing_queues)}",
         }
-    if len(workers["layers"]) == 0:
-        return {
-            "status": "error",
-            "message": "No layers workers running",
-        }
+
+    worker_counts = " ".join(
+        [f"{q.capitalize()} workers: {len(w)}" for q, w in workers.items()]
+    )
     return {
         "status": "ok",
-        "message": f"All systems connected! "
-        f"ID workers: {len(workers['id'])} Layer workers: {len(workers['layers'])}",
+        "message": f"All systems connected! {worker_counts}",
     }
 
 
