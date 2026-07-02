@@ -146,7 +146,7 @@ sequenceDiagram
 
     Worker->>Storage: Fetch & Parse TOML Descriptor
     Storage-->>Worker: Descriptor Content
-    Note over Worker: Builds LayerConversionRequest<br/>from TOML, then runs pipeline<br/>(DuckDB, Polars, GeoPandas)
+    Note over Worker: Builds LayerConversionRequest<br/>from TOML, then runs pipeline<br/>(DuckDB, Polars, polars-st)
 
     Worker->>Storage: Fetch Raw Geodata
     Storage-->>Worker: Geodata

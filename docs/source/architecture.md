@@ -10,13 +10,13 @@ The entry point for the service. It handles REST requests and offloads heavy dat
 ### 2. Task Queue (RQ & Redis)
 * **Redis** acts as the message broker, storing tasks that need to be processed.
 * **RQ (Redis Queue)** manages the queues and task execution.
-* Four named queues are used: `layers` (conversion jobs), `base` (base layer cache jobs), `meta` (per-tehsil download jobs), and `id` (identity jobs).
+* Three named queues are used: `layers` (conversion jobs), `base` (base layer cache jobs), and `meta` (per-tehsil download jobs).
 
 ### 3. Workers
-Dockerized background processes that pick up jobs from Redis. These workers utilize high-performance libraries like **DuckDB**, **Polars**, and **GeoPandas** to process the geospatial data efficiently and export it to cloud-native formats.
+Dockerized background processes that pick up jobs from Redis. These workers utilize high-performance libraries like **DuckDB**, **Polars**, and **polars-st** to process the geospatial data efficiently and export it to cloud-native formats.
 
 ### 4. Cloud Storage
-Processed files (like parquet or geojson) can interact with cloud storage using **Boto3** and **S3FS**.
+Processed files (like parquet or geojson) can interact with cloud storage using **S3FS**.
 
 ## System Diagram
 
@@ -58,7 +58,7 @@ graph TB
 
     W_layers -->|"fetch TOML descriptor"| Storage
     W_layers -->|"read base Parquet"| Storage
-    W_layers -->|"enqueue 1 job per tehsil"| Q_meta
+    W_layers -->|"enqueue 1 job per layer per tehsil"| Q_meta
     Q_meta --> W_meta
     W_meta -->|"WFS GeoJSON fetch"| GeoServer
     W_meta -->|"write temp Parquet"| Storage
