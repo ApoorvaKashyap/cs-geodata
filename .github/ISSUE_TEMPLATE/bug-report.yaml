@@ -25,7 +25,7 @@ body:
       label: Environment
       description: "Give the details of the environment you are using. Give 'docker:tag' if you are using docker."
       placeholder: "Please include details like versions of duckdb and polars, OS etc"
-    validation:
+    validations:
       required: true
   - type: textarea
     id: logs
