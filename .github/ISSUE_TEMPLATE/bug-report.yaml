@@ -12,41 +12,21 @@ body:
     validations:
       required: true
   - type: input
-    id: version
+    id: entity
     attributes:
-      label: Version
-      description: What is the version of library you are using?
-      placeholder: 0.0.1
+      label: Entity
+      description: Which entity are you running the pipeline on?
+      placeholder: Microwatershed
     validations:
       required: true
-  - type: dropdown
-    id: python
+  - type: textarea
+    id: env
     attributes:
-      label: What is the python version you are using?
-      multiple: true
-      options:
-        - Python 3.11
-        - Python 3.12
-        - Python 3.13
-        - Python 3.14
-  - type: dropdown
-    id: package-manager
-    attributes:
-      label: Which package manager are you using?
-      description: If you are unsure select pip.
-      options:
-        - uv
-        - poetry
-        - conda
-        - pip
-        - pixi
-        - pipenv
-  - type: input
-    id: OS
-    attributes:
-      label: Which OS are you using?
-      description: OS Name and version
-      placeholder: Ubuntu 22.04
+      label: Environment
+      description: "Give the details of the environment you are using. Give 'docker:tag' if you are using docker."
+      placeholder: "Please include details like versions of duckdb and polars, OS etc"
+    validation:
+      required: true
   - type: textarea
     id: logs
     attributes:
@@ -56,8 +36,8 @@ body:
   - type: upload
     id: screenshots
     attributes:
-      label: Upload screenshots
-      description: If applicable, add screenshots to help explain your problem.
+      label: Upload Files
+      description: If applicable, add screenshots or logs to help explain your problem.
     validations:
       required: false
       accept: ".png,.jpg,.gif,.log,.txt,.zip"
