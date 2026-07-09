@@ -1,0 +1,33 @@
+name: Blank Proposal
+description: Use this for all proposals.
+title: "[Proposal]: "
+labels: ["proposal"]
+body:
+  - type: textarea
+    id: issue
+    attributes:
+      label: Is the proposal related to an issue you are facing?
+      description: If yes, then please give a clear and concise description of the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: feature
+    attributes:
+      label: Describe the proposal you have in mind.
+      placeholder: Describe the proposal you are in detail.
+    validations:
+      required: true
+  - type: textarea
+    id: alts
+    attributes:
+      label: Have you considered any alternatives?
+      description: If so, please give a clear and concise description.
+    validations:
+      required: false
+  - type: textarea
+    id: additions
+    attributes:
+      label: Any additional context you want to share?
+      placeholder: Add any other context or screenshots about the proposal here.
+    validations:
+      required: false
