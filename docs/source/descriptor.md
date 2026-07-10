@@ -129,6 +129,6 @@ annual/ba_name=Cauvery/year=2023/part-0.parquet
 
 ## Full Example
 
-See [`examples/mws.toml`](https://github.com/ApoorvaKashyap/cs-geodata/blob/main/examples/mws.toml) for a complete working descriptor.
+See [`descriptors/mws.toml`](https://github.com/ApoorvaKashyap/cs-geodata/blob/main/descriptors/mws.toml) for a complete working descriptor.
 
 For a step-by-step trace of how a descriptor drives a full pipeline run, see [Data Flow](data_flow.md).

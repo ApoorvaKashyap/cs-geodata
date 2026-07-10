@@ -1089,8 +1089,13 @@ async def _fetch_base(
 
 
 if __name__ == "__main__":
+    import tomllib
+
     logger.add("logs/pipeline.log")
-    with open("examples/mws.json") as f:
-        request = json.load(f)
+    with open("descriptors/mws.toml", "rb") as f:
+        request = tomllib.load(f)
+    # Normalise field name for LayerConversionRequest
+    if "active_locations" in request:
+        request["layer_version"] = request.pop("active_locations")
     request = LayerConversionRequest(**request)
     asyncio.run(run_pipeline(request))
