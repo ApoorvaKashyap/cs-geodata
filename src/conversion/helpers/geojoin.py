@@ -5,43 +5,80 @@ from src.conversion.helpers.duckdb_funcs import init_duckdb
 
 BATCH_SIZE = 25_000
 
+# Regex patterns used to normalise disputed-territory state name strings.
+_DISPUTED_SUFFIX_RE = r"(?i)\s*\(disputed\)\s*"
+_DISPUTED_PREFIX_RE = r"(?i)^disputed\s*"
+_PARENS_RE = r"[()]"
+
+
+def _normalise_admin_col(col: pl.Expr) -> pl.Expr:
+    """Strip disputed-territory suffixes/prefixes and apply title-case to an admin name column."""
+    return (
+        col.str.replace(_DISPUTED_SUFFIX_RE, "")
+        .str.replace(_DISPUTED_PREFIX_RE, "")
+        .str.replace_all(_PARENS_RE, "")
+        .str.strip_chars()
+        .str.to_titlecase()
+    )
+
 
 def fill_missing_admin_boundaries(
     merged: pl.LazyFrame,
     tehsils_path: str,
     entity_key: str = "mws_id",
 ) -> pl.LazyFrame:
-    """Fill missing administrative boundaries using a spatial join.
+    """Fill missing administrative boundaries using a polygon-intersection spatial join.
 
-    .. todo::
-        Update this function to return a list of tehsils per entity.
+    Each entity polygon is intersected against the tehsil boundaries and assigned
+    **all** overlapping tehsils as a sorted, deduplicated list.  This correctly
+    handles entities (e.g. large watersheds) that span more than one tehsil.
 
-    Performs a point-in-polygon spatial join between the centroids of entity polygons
-    (that lack admin data) and the tehsil boundaries. Batches the operation to
-    avoid memory limits in DuckDB.
+    Entities that already carry admin data have their scalar ``state``,
+    ``district``, and ``tehsil`` columns wrapped into 1-element lists so that
+    the final output schema is uniform: every row has ``List[String]`` for all
+    three admin columns.
+
+    Batches the intersection join to avoid memory limits in DuckDB.
 
     Args:
         merged: LazyFrame containing the merged entity data.
         tehsils_path: Path to the raw tehsil boundaries shapefile/geopackage.
+        entity_key: Primary-key column name. Defaults to ``'mws_id'``.
 
     Returns:
-        A LazyFrame with filled state, district, and tehsil columns for previously
-        unknown polygons, keeping them null if they fall outside India's bounds.
+        A LazyFrame where ``state``, ``district``, and ``tehsil`` are typed as
+        ``List[String]``.  Entities with no intersecting tehsil carry empty
+        lists for those fields.
     """
     logger.info("Loading tehsil boundaries")
 
-    # Treat both nulls and empty/whitespace strings as missing admin data
+    # Treat both nulls and empty/whitespace strings as missing admin data.
     is_missing = pl.col("state").is_null() | (
         pl.col("state").cast(pl.String).str.strip_chars() == ""
     )
-    has_admin = merged.filter(~is_missing)
+
+    # Wrap existing scalar admin columns into 1-element lists so the final
+    # concat produces a uniform List[String] schema across all rows.
+    has_admin = merged.filter(~is_missing).with_columns(
+        pl.col("state").map_elements(
+            lambda x: [x] if x else [], return_dtype=pl.List(pl.String)
+        ),
+        pl.col("district").map_elements(
+            lambda x: [x] if x else [], return_dtype=pl.List(pl.String)
+        ),
+        pl.col("tehsil").map_elements(
+            lambda x: [x] if x else [], return_dtype=pl.List(pl.String)
+        ),
+    )
     needs_admin = merged.filter(is_missing)
 
-    # Only collect the columns needed for the spatial join (lightweight)
+    # Only collect the columns needed for the spatial join (lightweight).
     join_keys = needs_admin.select([entity_key, "geometry"]).collect(engine="streaming")
 
     row_count = join_keys.height
-    logger.info(f"Filling admin boundaries for {row_count} entity polygons")
+    logger.info(
+        f"Filling admin boundaries for {row_count} entity polygons via intersection"
+    )
 
     if row_count == 0:
         logger.info("No missing admin boundaries — skipping spatial join")
@@ -49,19 +86,18 @@ def fill_missing_admin_boundaries(
 
     conn = init_duckdb()
     try:
-        # Load tehsil boundaries once into a persistent DuckDB table
+        # Load tehsil boundaries once into a persistent DuckDB table.
         conn.execute(f"""
             CREATE TABLE tehsils AS
             SELECT
-                STATE AS state,
+                STATE    AS state,
                 District AS district,
-                TEHSIL AS tehsil,
-                geom AS geometry
+                TEHSIL   AS tehsil,
+                geom     AS geometry
             FROM ST_Read('{tehsils_path}')
         """)
         logger.info("Tehsil boundaries loaded into DuckDB")
 
-        # Process in batches to avoid OOM — only 3 columns per batch
         lookup_frames: list[pl.DataFrame] = []
         total_matched = 0
         total_unmatched = 0
@@ -75,6 +111,8 @@ def fill_missing_admin_boundaries(
 
             conn.register("batch_table", batch.to_arrow())
 
+            # Polygon-intersection join: returns one row per (entity, tehsil) pair.
+            # Polars aggregates into sorted unique lists after normalisation.
             sql = f"""
                 SELECT
                     b.{entity_key},
@@ -84,29 +122,31 @@ def fill_missing_admin_boundaries(
                 FROM (
                     SELECT
                         {entity_key},
-                        ST_Centroid(ST_GeomFromWKB(geometry)) AS centroid
+                        ST_GeomFromWKB(geometry) AS entity_geom
                     FROM batch_table
                 ) b
                 LEFT JOIN tehsils t
-                    ON ST_Within(b.centroid, t.geometry)
+                    ON ST_Intersects(b.entity_geom, t.geometry)
             """
             result = conn.execute(sql).fetch_arrow_table()
-            batch_lookup = pl.DataFrame(pl.from_arrow(result)).with_columns(
-                # Normalize: strip "(Disputed)" suffix and "Disputed " prefix,
-                # e.g. "MADHYA PRADESH(DISPUTED)" → "Madhya Pradesh"
-                #      "DISPUTED (WEST BENGAL)"   → "West Bengal"
-                pl.col("state")
-                .str.replace(r"(?i)\s*\(disputed\)\s*", "")
-                .str.replace(r"(?i)^disputed\s*", "")
-                .str.replace_all(r"[()]", "")
-                .str.strip_chars()
-                .str.to_titlecase(),
+
+            # Normalise admin names (title-case, strip disputed-territory labels).
+            batch_df = pl.DataFrame(pl.from_arrow(result)).with_columns(
+                _normalise_admin_col(pl.col("state")),
                 pl.col("district").str.to_titlecase(),
                 pl.col("tehsil").str.to_titlecase(),
             )
 
-            matched = batch_lookup.filter(pl.col("state").is_not_null()).height
-            unmatched = batch_lookup.filter(pl.col("state").is_null()).height
+            # Aggregate: one row per entity, each admin column becomes a sorted
+            # unique list of all intersecting values.
+            batch_lookup = batch_df.group_by(entity_key).agg(
+                pl.col("state").drop_nulls().unique().sort(),
+                pl.col("district").drop_nulls().unique().sort(),
+                pl.col("tehsil").drop_nulls().unique().sort(),
+            )
+
+            matched = batch_lookup.filter(pl.col("state").list.len() > 0).height
+            unmatched = batch_lookup.filter(pl.col("state").list.len() == 0).height
             total_matched += matched
             total_unmatched += unmatched
             logger.info(f"  Batch result: {matched} matched, {unmatched} unmatched")
@@ -114,17 +154,7 @@ def fill_missing_admin_boundaries(
             lookup_frames.append(batch_lookup)
             conn.unregister("batch_table")
 
-        # Concat the lightweight lookup (only 4 columns: entity_key,
-        # state, district, tehsil) — narrow frame instead of full merged width
         admin_lookup = pl.concat(lookup_frames, how="diagonal_relaxed")
-
-        # Deduplicate: centroids on tehsil boundaries can match
-        # multiple tehsils via ST_Within, producing 2 rows per polygon
-        pre_dedup = admin_lookup.height
-        admin_lookup = admin_lookup.unique(subset=[entity_key])
-        deduped = pre_dedup - admin_lookup.height
-        if deduped > 0:
-            logger.info(f"Removed {deduped} boundary-overlap duplicates")
 
         logger.info(
             f"Admin boundary fill: {total_matched} matched, {total_unmatched} unmatched"
@@ -134,8 +164,8 @@ def fill_missing_admin_boundaries(
 
     logger.info("Admin boundary fill complete")
 
-    # Join the admin lookup back onto the full needs_admin lazily
-    # (avoids materializing 2584 columns during spatial join)
+    # Join the admin lookup (3 list columns + entity_key) back onto needs_admin
+    # lazily — avoids materialising all columns during the spatial join.
     filled = needs_admin.drop(["state", "district", "tehsil"]).join(
         admin_lookup.lazy(),
         on=entity_key,
