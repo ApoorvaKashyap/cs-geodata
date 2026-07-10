@@ -3,6 +3,7 @@ import json
 import re
 from pathlib import Path
 
+import pyarrow as pa
 import pyarrow.parquet as pq
 import polars as pl
 import polars_st as st
@@ -58,6 +59,75 @@ _DTYPE_RANK: dict[type, int] = {
 def _dtype_sort_key(dt: pl.DataType) -> int:
     """Return a numeric rank for *dt* so that ``max()`` picks the widest type."""
     return _DTYPE_RANK.get(type(dt), 6)  # default to Float64 rank
+
+
+def _select_bloom_filter_cols(
+    pf: pq.ParquetFile,
+    entity_key: str,
+    cardinality_threshold: float = 0.30,
+) -> dict[str, bool]:
+    """Select string columns that should get a Bloom filter index.
+
+    Two rules are applied:
+
+    1. **Always include** string columns whose name contains ``"id"``
+       (case-insensitive) or that equal *entity_key* — these are high-value
+       point-lookup targets where string min/max stats give poor pruning.
+    2. **Cardinality check** for all other string columns: sample the first
+       row group and include the column only if
+       ``distinct_values / sample_rows >= cardinality_threshold``.
+
+    ``geometry`` is always excluded regardless of any rule.
+
+    Args:
+        pf: Open :class:`pyarrow.parquet.ParquetFile`.
+        entity_key: Primary-key column name (e.g. ``'mws_id'``).
+        cardinality_threshold: Min ratio of distinct values to row-group size
+            for a non-ID string column to qualify. Default ``0.30`` (30 %).
+
+    Returns:
+        ``dict[column_name, True]`` ready to pass as ``bloom_filter_options``
+        to :class:`pyarrow.parquet.ParquetWriter`.
+    """
+    schema = pf.schema_arrow
+    if pf.metadata.num_rows == 0 or pf.metadata.num_row_groups == 0:
+        return {}
+
+    # Collect candidate string columns, always skip geometry.
+    string_cols = [
+        field.name
+        for field in schema
+        if (pa.types.is_string(field.type) or pa.types.is_large_string(field.type))
+        and field.name != "geometry"
+    ]
+    if not string_cols:
+        return {}
+
+    # Rule 1: unconditional candidates (no I/O needed).
+    always_cols = {
+        col for col in string_cols if col == entity_key or "id" in col.lower()
+    }
+
+    # Rule 2: remaining columns need a cardinality sample.
+    cardinality_candidates = [c for c in string_cols if c not in always_cols]
+    bloom_cols: dict[str, bool] = {col: True for col in always_cols}
+
+    if cardinality_candidates:
+        try:
+            sample: pa.Table = pf.read_row_group(0, columns=cardinality_candidates)
+            sample_rows = sample.num_rows
+            for col_name in cardinality_candidates:
+                if sample_rows == 0:
+                    break
+                n_distinct = sample.column(col_name).drop_null().unique().length()
+                if n_distinct / sample_rows >= cardinality_threshold:
+                    bloom_cols[col_name] = True
+        except Exception as exc:
+            logger.warning(
+                f"Cardinality sampling failed ({exc}); falling back to ID-only bloom filter selection."
+            )
+
+    return bloom_cols
 
 
 async def run_pipeline(request: LayerConversionRequest) -> None:
@@ -322,7 +392,11 @@ async def _write_split_parquets(
 
         logger.info(f"Writing static GeoParquet → {output_path}/static/")
         await _write_static_geoparquet_duckdb(
-            conn, static_cols, f"{output_path}/static", partition_by
+            conn,
+            static_cols,
+            f"{output_path}/static",
+            partition_by,
+            entity_key=entity_key,
         )
 
         if fortnightly_cols:
@@ -335,6 +409,7 @@ async def _write_split_parquets(
                 non_geo_keep,
                 f"{output_path}/fortnightly",
                 partition_by,
+                entity_key=entity_key,
             )
         else:
             logger.info("No fortnightly columns detected — skipping fortnightly output")
@@ -349,6 +424,7 @@ async def _write_split_parquets(
                 non_geo_keep,
                 f"{output_path}/annual",
                 partition_by,
+                entity_key=entity_key,
             )
         else:
             logger.info("No annual columns detected — skipping annual output")
@@ -362,6 +438,7 @@ async def _write_static_geoparquet_duckdb(
     static_cols: list[str],
     dir_path: str,
     partition_by: str | None = None,
+    entity_key: str = "",
 ) -> None:
     """Write the static columns as GeoParquet file(s) via DuckDB.
 
@@ -445,7 +522,7 @@ async def _write_static_geoparquet_duckdb(
         logger.warning(f"No .parquet files found under {write_target} to patch.")
     else:
         for parquet_file in written:
-            _patch_geoparquet_metadata(parquet_file)
+            _patch_geoparquet_metadata(parquet_file, entity_key=entity_key)
         logger.info(
             f"Patched GeoParquet metadata (v1.1.0 + covering.bbox) "
             f"on {len(written)} file(s)"
@@ -468,21 +545,26 @@ async def _write_static_geoparquet_duckdb(
         shutil.rmtree(tmp_local, ignore_errors=True)
 
 
-def _patch_geoparquet_metadata(parquet_file: Path) -> None:
+def _patch_geoparquet_metadata(parquet_file: Path, entity_key: str = "") -> None:
     """Upgrade the GeoParquet ``geo`` metadata key inside a Parquet file.
 
-    Performs two upgrades in-place:
+    Performs three upgrades in-place:
 
     * Bumps ``version`` from ``"1.0.0"`` → ``"1.1.0"``.
     * Injects a ``covering.bbox`` entry into the primary geometry column
       metadata, pointing to the ``bbox`` struct column's four child fields
       (``xmin``, ``ymin``, ``xmax``, ``ymax``).
+    * Adds Bloom filters for string columns selected by
+      :func:`_select_bloom_filter_cols` — ID-like columns always, other
+      string columns when cardinality ≥ 30 %.
 
     Data pages are streamed one row-group at a time so the full 15M-row
     WKB geometry column is never loaded into RAM all at once.
 
     Args:
         parquet_file (Path): Path to the ``.parquet`` file to patch.
+        entity_key (str): Entity primary-key column name, forwarded to
+            :func:`_select_bloom_filter_cols`.
     """
     tmp_path = parquet_file.with_suffix(".patching.parquet")
     try:
@@ -521,6 +603,11 @@ def _patch_geoparquet_metadata(parquet_file: Path) -> None:
         kv_meta[geo_key] = json.dumps(geo).encode()
         new_schema = old_schema.with_metadata(kv_meta)
 
+        # 3. Select Bloom filter candidates for this file.
+        bloom_cols = _select_bloom_filter_cols(pf, entity_key)
+        if bloom_cols:
+            logger.debug(f"{parquet_file.name}: Bloom filters on {list(bloom_cols)}")
+
         # Stream row-groups one at a time — avoids loading the full WKB geometry
         # column (multi-GB at 15.92M rows) into RAM.
         # The ParquetWriter carries new_schema so the file-level kv_meta
@@ -531,6 +618,7 @@ def _patch_geoparquet_metadata(parquet_file: Path) -> None:
             compression="zstd",
             compression_level=settings.parquet_compression_level,
             write_statistics=True,
+            bloom_filter_options=bloom_cols or None,
         )
         try:
             n_groups = pf.metadata.num_row_groups
@@ -546,6 +634,72 @@ def _patch_geoparquet_metadata(parquet_file: Path) -> None:
         logger.warning(
             f"Failed to patch GeoParquet metadata on {parquet_file.name}: {exc}"
         )
+
+
+def _apply_bloom_filters_to_dir(dir_path: str, entity_key: str) -> None:
+    """Rewrite all Parquet files under *dir_path* to add Bloom filters.
+
+    Polars ``sink_parquet`` does not expose Bloom filter options natively, so
+    this function provides a post-processing pass for temporal (annual /
+    fortnightly) outputs.  Each file is rewritten in-place via PyArrow with
+    Bloom filters applied to the columns selected by
+    :func:`_select_bloom_filter_cols`.
+
+    Files for which no eligible columns are found are left untouched.
+
+    Args:
+        dir_path: Root directory of the Parquet files to patch (may contain
+            Hive-partition subdirectories).
+        entity_key: Entity primary-key column name, forwarded to
+            :func:`_select_bloom_filter_cols`.
+    """
+    written = sorted(Path(dir_path).rglob("*.parquet"))
+    if not written:
+        logger.warning(
+            f"No .parquet files found under {dir_path} — skipping bloom filter pass."
+        )
+        return
+
+    patched = 0
+    for parquet_file in written:
+        tmp_path = parquet_file.with_suffix(".bloom.parquet")
+        try:
+            pf = pq.ParquetFile(str(parquet_file), memory_map=True)
+            bloom_cols = _select_bloom_filter_cols(pf, entity_key)
+            if not bloom_cols:
+                logger.debug(
+                    f"{parquet_file.name}: no bloom filter candidates — skipping."
+                )
+                continue
+
+            writer = pq.ParquetWriter(
+                str(tmp_path),
+                pf.schema_arrow,
+                compression="zstd",
+                compression_level=settings.parquet_compression_level,
+                write_statistics=True,
+                bloom_filter_options=bloom_cols,
+            )
+            try:
+                for i in range(pf.metadata.num_row_groups):
+                    writer.write_table(pf.read_row_group(i))
+            finally:
+                writer.close()
+
+            tmp_path.replace(parquet_file)
+            patched += 1
+            logger.debug(
+                f"{parquet_file.name}: bloom filters applied on {list(bloom_cols)}"
+            )
+        except Exception as exc:
+            tmp_path.unlink(missing_ok=True)
+            logger.warning(
+                f"Failed to apply bloom filters to {parquet_file.name}: {exc}"
+            )
+
+    logger.info(
+        f"Bloom filter pass complete: {patched}/{len(written)} file(s) patched in {dir_path}"
+    )
 
 
 def _upload_dir_to_s3(local_dir: Path, s3_prefix: str) -> int:
@@ -580,6 +734,7 @@ def _write_temporal_parquet_polars(
     keep_cols: list[str],
     base_path: str,
     partition_by: str | None = None,
+    entity_key: str = "",
 ) -> None:
     """Write melted temporal (fortnightly or annual) output using Polars.
 
@@ -707,6 +862,12 @@ def _write_temporal_parquet_polars(
         shutil.rmtree(slices_tmp, ignore_errors=True)
 
     logger.info(f"{kind.capitalize()} output written to {write_target}")
+
+    # Apply Bloom filters as a post-processing pass — Polars sink_parquet does
+    # not expose bloom_filter_options, so we rewrite each output file in-place
+    # via PyArrow before any S3 upload.
+    logger.info(f"Applying bloom filters to {kind} output in {write_target}")
+    _apply_bloom_filters_to_dir(write_target, entity_key)
 
     if is_s3 and tmp_local is not None:
         try:
