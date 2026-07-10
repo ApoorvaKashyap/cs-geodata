@@ -631,9 +631,9 @@ def _patch_geoparquet_metadata(parquet_file: Path, entity_key: str = "") -> None
         logger.debug(f"Patched GeoParquet metadata on {parquet_file.name}")
     except Exception as exc:
         tmp_path.unlink(missing_ok=True)
-        logger.warning(
+        raise RuntimeError(
             f"Failed to patch GeoParquet metadata on {parquet_file.name}: {exc}"
-        )
+        ) from exc
 
 
 def _apply_bloom_filters_to_dir(dir_path: str, entity_key: str) -> None:
@@ -693,13 +693,47 @@ def _apply_bloom_filters_to_dir(dir_path: str, entity_key: str) -> None:
             )
         except Exception as exc:
             tmp_path.unlink(missing_ok=True)
-            logger.warning(
+            raise RuntimeError(
                 f"Failed to apply bloom filters to {parquet_file.name}: {exc}"
-            )
+            ) from exc
 
     logger.info(
         f"Bloom filter pass complete: {patched}/{len(written)} file(s) patched in {dir_path}"
     )
+
+
+def _normalize_parquet_filenames(dir_path: str) -> None:
+    """Rename Parquet files in each partition leaf directory to ``data_N.parquet``.
+
+    Polars' ``sink_parquet`` names output files ``00000000.parquet``,
+    ``00000001.parquet``, etc.  This function renames them to ``data_0.parquet``,
+    ``data_1.parquet``, ... to match the convention that DuckDB ``COPY TO``
+    uses for the static GeoParquet output.
+
+    Each leaf directory is treated independently, so the counter resets for
+    every Hive-partition subdirectory.
+
+    Files that are already named ``data_N.parquet`` are left untouched.
+
+    Args:
+        dir_path: Root of the directory tree whose filenames should be
+            normalised (may contain Hive-partition subdirectories).
+    """
+    root = Path(dir_path)
+    leaf_dirs = sorted({p.parent for p in root.rglob("*.parquet")})
+    renamed = 0
+    for leaf_dir in leaf_dirs:
+        files = sorted(leaf_dir.glob("*.parquet"))
+        for i, src in enumerate(files):
+            dest = leaf_dir / f"data_{i}.parquet"
+            if src.name != dest.name:
+                src.rename(dest)
+                renamed += 1
+                logger.debug(f"Renamed {src.name} -> {dest.name} in {leaf_dir}")
+    if renamed:
+        logger.info(
+            f"Normalized {renamed} parquet filename(s) to data_N.parquet in {dir_path}"
+        )
 
 
 def _upload_dir_to_s3(local_dir: Path, s3_prefix: str) -> int:
@@ -868,6 +902,10 @@ def _write_temporal_parquet_polars(
     # via PyArrow before any S3 upload.
     logger.info(f"Applying bloom filters to {kind} output in {write_target}")
     _apply_bloom_filters_to_dir(write_target, entity_key)
+
+    # Rename Polars-generated filenames (00000000.parquet) to data_N.parquet
+    # to match DuckDB's convention used for the static output.
+    _normalize_parquet_filenames(write_target)
 
     if is_s3 and tmp_local is not None:
         try:
