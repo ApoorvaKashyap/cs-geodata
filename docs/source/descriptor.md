@@ -19,7 +19,7 @@ Pass it to the API via `POST /api/v1/vector/layers` as the `descriptor_url` fiel
 | `super_field` | string | | Column inside the super-layer file whose value is assigned to every base entity via centroid-in-polygon join. Must be paired with `super_layer_source`. |
 | `super_layer_key` | string | | Informational key column in the super-layer (not used in joins). |
 | `partition_by` | string | | Output Hive partition column. Usually the same as `super_field`. |
-| `add_admin` | bool | | If `true`, runs a centroid-in-polygon join against tehsil boundaries to fill `state`/`district`/`tehsil` for any rows with null admin columns. Default: `false`. *(TODO: will be updated to return a list of tehsils)* |
+| `add_admin` | bool | | If `true`, runs a polygon-intersection join against tehsil boundaries to fill `state`/`district`/`tehsil` (as lists of strings) for any rows with null admin columns. Default: `false`. |
 
 ```toml
 entity = "mws"

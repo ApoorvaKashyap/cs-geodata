@@ -91,10 +91,10 @@ Base entities with no matching attribute data receive `null` values. The merged 
 
 ## Step 8 — Admin boundary fill (optional)
 
-If any entity has null `state`/`district`/`tehsil` after the merge (outside all active tehsils), and `add_admin = true` or missing rows exist, the pipeline runs a centroid-in-polygon join against the tehsil boundary shapefile (`settings.tehsil_bounds`). Processed in batches of 25,000 to avoid DuckDB OOM.
-:::{todo}
-This step will be updated to return a list of tehsils per entity key.
-:::
+If any entity has null `state`/`district`/`tehsil` after the merge (outside all active tehsils), and `add_admin = true` or missing rows exist, the pipeline runs a polygon-intersection join against the tehsil boundary shapefile (`settings.tehsil_bounds`). Processed in batches of 25,000 to avoid DuckDB OOM.
+
+This correctly handles large entities (like watersheds) that span multiple boundaries. The `state`, `district`, and `tehsil` columns are converted to `List[String]` types across the entire dataset, containing all overlapping administrative zones for each entity.
+
 ---
 
 ## Step 9 — Column classification and output
@@ -118,6 +118,8 @@ output_path/
 └── annual/          # Long Parquet — one row per (entity_key, year)
     └── year=YYYY/
 ```
+
+Before being finalised, all output `.parquet` files are post-processed to inject **Bloom filters** for the primary entity key and all string columns (to accelerate point-lookups). Output filenames are also normalised to `data_N.parquet` (e.g. `data_0.parquet`) within each partition directory.
 
 If `partition_by` is set, an outer Hive level wraps all three (e.g. `ba_name=Cauvery/`). Temp files are cleaned up and the job is marked **finished**.
 
