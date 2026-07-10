@@ -784,7 +784,7 @@ def _write_temporal_parquet_polars(
             try:
                 resolved = max(resolved, dt, key=lambda d: _dtype_sort_key(d))
             except Exception:
-                resolved = pl.Float64  # safe fallback for numeric data
+                resolved = pl.Float64()  # safe fallback for numeric data
         var_dtypes[var] = resolved
 
     # Enforce strict column ordering
