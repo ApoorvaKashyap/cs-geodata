@@ -119,7 +119,7 @@ def _select_bloom_filter_cols(
             for col_name in cardinality_candidates:
                 if sample_rows == 0:
                     break
-                n_distinct = sample.column(col_name).drop_null().unique().length()
+                n_distinct = len(sample.column(col_name).drop_null().unique())
                 if n_distinct / sample_rows >= cardinality_threshold:
                     bloom_cols[col_name] = True
         except Exception as exc:
@@ -478,9 +478,15 @@ async def _write_static_geoparquet_duckdb(
     tmp_local = Path(tempfile.mkdtemp(prefix="static_geoparquet_"))
     write_target = str(tmp_local)
 
+    if not partition_by and not dir_path.endswith(".parquet"):
+        dir_path = f"{dir_path}.parquet"
+
     # Ensure the final destination directory exists (local only; S3 is handled by upload).
     if not is_s3:
-        Path(dir_path).mkdir(parents=True, exist_ok=True)
+        if partition_by:
+            Path(dir_path).mkdir(parents=True, exist_ok=True)
+        else:
+            Path(dir_path).parent.mkdir(parents=True, exist_ok=True)
 
     col_select = ", ".join(f'"{c}"' for c in static_cols if c != "geometry")
     if not col_select:
@@ -531,16 +537,29 @@ async def _write_static_geoparquet_duckdb(
     # Move patched files to their final destination.
     try:
         if is_s3:
-            n = _upload_dir_to_s3(tmp_local, dir_path)
-            logger.info(f"Uploaded {n} patched static file(s) to {dir_path}")
+            if partition_by:
+                n = _upload_dir_to_s3(tmp_local, dir_path)
+                logger.info(f"Uploaded {n} patched static file(s) to {dir_path}")
+            else:
+                import s3fs
+
+                fs = s3fs.S3FileSystem()
+                single_file = tmp_local / "part-0.parquet"
+                fs.put(str(single_file), dir_path)
+                logger.info(f"Uploaded 1 patched static file to {dir_path}")
         else:
-            # Copy every file preserving the relative Hive subdirectory structure.
-            for local_file in written:
-                rel = local_file.relative_to(tmp_local)
-                dest = Path(dir_path) / rel
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(str(local_file), str(dest))
-            logger.info(f"Copied {len(written)} static file(s) to {dir_path}")
+            if partition_by:
+                # Copy every file preserving the relative Hive subdirectory structure.
+                for local_file in written:
+                    rel = local_file.relative_to(tmp_local)
+                    dest = Path(dir_path) / rel
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(str(local_file), str(dest))
+                logger.info(f"Copied {len(written)} static file(s) to {dir_path}")
+            else:
+                single_file = tmp_local / "part-0.parquet"
+                shutil.copy2(str(single_file), str(dir_path))
+                logger.info(f"Copied 1 static file to {dir_path}")
     finally:
         shutil.rmtree(tmp_local, ignore_errors=True)
 
@@ -653,7 +672,12 @@ def _apply_bloom_filters_to_dir(dir_path: str, entity_key: str) -> None:
         entity_key: Entity primary-key column name, forwarded to
             :func:`_select_bloom_filter_cols`.
     """
-    written = sorted(Path(dir_path).rglob("*.parquet"))
+    root = Path(dir_path)
+    if root.is_file():
+        written = [root]
+    else:
+        written = sorted(root.rglob("*.parquet"))
+
     if not written:
         logger.warning(
             f"No .parquet files found under {dir_path} — skipping bloom filter pass."
@@ -720,6 +744,9 @@ def _normalize_parquet_filenames(dir_path: str) -> None:
             normalised (may contain Hive-partition subdirectories).
     """
     root = Path(dir_path)
+    if root.is_file():
+        return
+
     leaf_dirs = sorted({p.parent for p in root.rglob("*.parquet")})
     renamed = 0
     for leaf_dir in leaf_dirs:
@@ -835,17 +862,25 @@ def _write_temporal_parquet_polars(
     if kind == "fortnightly":
         partition_cols.append("year")
 
+    if not partition_cols and not base_path.endswith(".parquet"):
+        base_path = f"{base_path}.parquet"
+
     import shutil
     import tempfile
 
     is_s3 = base_path.startswith("s3://")
     if is_s3:
         tmp_local = Path(tempfile.mkdtemp(prefix=f"{kind}_geoparquet_"))
-        write_target = str(tmp_local)
+        write_target = (
+            str(tmp_local) if partition_cols else str(tmp_local / f"{kind}.parquet")
+        )
     else:
         tmp_local = None
         write_target = str(Path(base_path).expanduser())
-        Path(write_target).mkdir(parents=True, exist_ok=True)
+        if partition_cols:
+            Path(write_target).mkdir(parents=True, exist_ok=True)
+        else:
+            Path(write_target).parent.mkdir(parents=True, exist_ok=True)
 
     # Sink each time-period slice to its own temp parquet individually.
     # This avoids building one giant concat plan (N slices × 15.92M rows)
@@ -886,8 +921,14 @@ def _write_temporal_parquet_polars(
         # Scan all per-slice files (already on disk, narrow columns) and
         # partition-sink in one streaming pass.
         logger.debug(f"Writing {kind} frame to {write_target} via Polars")
+
+        target_path = (
+            pl.PartitionBy(write_target, key=partition_cols)
+            if partition_cols
+            else write_target
+        )
         pl.scan_parquet(slice_paths).select(all_final_cols).sink_parquet(
-            pl.PartitionBy(write_target, key=partition_cols),
+            target_path,
             compression="zstd",
             compression_level=settings.parquet_compression_level,
             row_group_size=settings.parquet_row_group_size,
@@ -909,8 +950,15 @@ def _write_temporal_parquet_polars(
 
     if is_s3 and tmp_local is not None:
         try:
-            n = _upload_dir_to_s3(tmp_local, base_path)
-            logger.info(f"Uploaded {n} {kind} file(s) to {base_path}")
+            if partition_cols:
+                n = _upload_dir_to_s3(tmp_local, base_path)
+                logger.info(f"Uploaded {n} {kind} file(s) to {base_path}")
+            else:
+                import s3fs
+
+                fs = s3fs.S3FileSystem()
+                fs.put(write_target, base_path)
+                logger.info(f"Uploaded 1 {kind} file to {base_path}")
         finally:
             shutil.rmtree(tmp_local, ignore_errors=True)
 
