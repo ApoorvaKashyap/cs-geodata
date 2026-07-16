@@ -512,7 +512,7 @@ async def _write_static_geoparquet_duckdb(
         TO '{copy_target}'
         WITH (
             FORMAT 'PARQUET',
-            ROW_GROUP_SIZE {settings.parquet_row_group_size},
+            ROW_GROUP_SIZE {settings.static_parquet_row_group_size},
             COMPRESSION 'ZSTD',
             COMPRESSION_LEVEL {settings.parquet_compression_level}
             {(", OVERWRITE_OR_IGNORE true, PARTITION_BY (" + partition_by + ")") if partition_by else ""}
@@ -1010,11 +1010,15 @@ def _group_annual_cols(cols: list[str]) -> dict[str, dict[str, str]]:
         if not m:
             continue
         year_suffix = m.group(1)
+
+        first_year = _FIRST_YEAR_RE.search(year_suffix)
+        normalized_year = first_year.group() if first_year else year_suffix
+
         if col.endswith(year_suffix):
             prefix = col[: -len(year_suffix)].rstrip("_")
         else:
             prefix = col
-        groups.setdefault(year_suffix, {})[prefix] = col
+        groups.setdefault(normalized_year, {})[prefix] = col
     return groups
 
 
