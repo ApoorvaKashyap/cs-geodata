@@ -330,6 +330,24 @@ async def run_pipeline(request: LayerConversionRequest) -> None:
         merged_path, request.output_path, all_cols, request.key, request.partition_by
     )
 
+    # Write metadata JSON
+    try:
+        from datetime import datetime, timezone
+        import fsspec
+
+        metadata = {
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "timezone": "UTC",
+            "descriptor": request.model_dump(),
+        }
+        metadata_path = f"{request.output_path.rstrip('/')}/metadata.json"
+        logger.info(f"Writing metadata to {metadata_path}")
+
+        with fsspec.open(metadata_path, "w") as f:
+            json.dump(metadata, f, indent=2)
+    except Exception as exc:
+        logger.error(f"Failed to write metadata JSON: {exc}")
+
     # Cleanup temp files
     logger.info(f"Cleaning up temp directory: {tmpdir}")
     import shutil
