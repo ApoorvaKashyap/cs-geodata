@@ -344,7 +344,7 @@ async def run_pipeline(request: LayerConversionRequest) -> None:
         logger.info(f"Writing metadata to {metadata_path}")
 
         with fsspec.open(metadata_path, "w") as f:
-            json.dump(metadata, f, indent=2)
+            json.dump(metadata, f, indent=2)  # type: ignore[arg-type]
     except Exception as exc:
         logger.error(f"Failed to write metadata JSON: {exc}")
 

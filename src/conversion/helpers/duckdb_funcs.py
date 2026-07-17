@@ -22,11 +22,13 @@ def init_duckdb() -> DuckDBPyConnection:
     """
     extensions = ["httpfs", "spatial", "aws"]
     try:
-        tmp_db_fd, tmp_db_path = tempfile.mkstemp(suffix=".db", prefix="duckdb_")
         import os
+        import weakref
 
-        os.close(tmp_db_fd)
+        tmp_dir = tempfile.TemporaryDirectory(prefix="duckdb_db_")
+        tmp_db_path = os.path.join(tmp_dir.name, "duckdb.db")
         conn = duckdb.connect(tmp_db_path)
+        weakref.finalize(conn, tmp_dir.cleanup)
         for ext in extensions:
             conn.install_extension(ext)
             conn.load_extension(ext)
