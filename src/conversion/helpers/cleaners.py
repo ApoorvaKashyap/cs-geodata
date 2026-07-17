@@ -105,6 +105,31 @@ def expand_rename_globs(cols: list[str], rename_dict: dict[str, str]) -> dict[st
     return expanded
 
 
+def expand_drop_globs(cols: list[str], drop_list: list[str]) -> list[str]:
+    """Expand a list of column names with optional glob patterns.
+
+    E.g. ["prefix_*", "exact_name"] -> ["prefix_1", "prefix_2", "exact_name"].
+    """
+    import fnmatch
+
+    expanded = set()
+    col_lower_map = {c.lower(): c for c in cols}
+
+    for pattern in drop_list:
+        pattern_lower = pattern.lower()
+        if "*" in pattern_lower or "?" in pattern_lower:
+            for c in cols:
+                if fnmatch.fnmatch(c.lower(), pattern_lower):
+                    expanded.add(c)
+        else:
+            # For exact matches, prefer the actual casing in the dataframe if it exists
+            if pattern_lower in col_lower_map:
+                expanded.add(col_lower_map[pattern_lower])
+            else:
+                expanded.add(pattern)
+    return list(expanded)
+
+
 def rename_and_drop(
     layer: pl.LazyFrame, rename: dict[str, str], drop: list[str]
 ) -> pl.LazyFrame:
@@ -120,8 +145,10 @@ def rename_and_drop(
     """
     cols = layer.collect_schema().names()
     expanded_rename = expand_rename_globs(cols, rename)
+    expanded_drop = expand_drop_globs(cols, drop)
+
     return (
-        layer.drop(drop, strict=False)
+        layer.drop(expanded_drop, strict=False)
         .rename(expanded_rename, strict=False)
         .select(pl.all().name.to_lowercase())
     )
