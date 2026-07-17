@@ -60,7 +60,8 @@ def collect_lf(lf: pl.LazyFrame) -> pl.DataFrame:
         engine = pl.GPUEngine(raise_on_fail=True)
         try:
             result = lf.collect(engine=engine)
-            assert isinstance(result, pl.DataFrame)
+            if not isinstance(result, pl.DataFrame):  # pragma: no cover
+                raise TypeError(f"Expected pl.DataFrame, got {type(result)}")
             return result
         except Exception as e:
             _GPU_AVAILABLE = False

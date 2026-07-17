@@ -30,3 +30,11 @@ docs = [
 
 [tool.pyright]
 executionEnvironments = [{ root = "." }]
+
+[tool.ruff.lint]
+# S608: SQL injection false-positives — all DuckDB queries embed only internal
+#       file paths, column names, and settings values, never user input.
+# S104: intentional bind to 0.0.0.0 in the containerised API entrypoint.
+# S108: /tmp usage is either via tempfile or config-default overrideable values.
+per-file-ignores = { "src/conversion/helpers/api.py" = ["S608"], "src/conversion/helpers/geojoin.py" = ["S608"], "src/conversion/algos.py" = ["S608"], "main.py" = ["S104"] }
+ignore = ["S108"]

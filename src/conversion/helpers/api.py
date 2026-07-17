@@ -27,6 +27,7 @@ async def get_active() -> pl.DataFrame:
     response = requests.get(
         f"{settings.corestack_api_url}/get_active_locations/",
         headers={"X-API-KEY": f"{settings.corestack_api_key.get_secret_value()}"},
+        timeout=30,
     )
     response.raise_for_status()
     _df = pl.read_json(response.content)
@@ -74,7 +75,7 @@ def download_and_convert_geojson(
         f"Fetching + converting layer={layer} district={district} tehsil={tehsil}"
     )
 
-    response = requests.get(url)
+    response = requests.get(url, timeout=30)
     if response.status_code != 200:
         logger.warning(
             f"HTTP {response.status_code} for {layer}/{district}/{tehsil} — skipping"
@@ -221,7 +222,7 @@ def _convert_base_sync(
             os.close(tmp_fd)
 
             logger.info(f"Step 1: Hilbert sort -> temp {tmp_path}")
-            conn.execute(f"""
+            sql_step1 = f"""
                 COPY (
                     SELECT
                         * EXCLUDE (geom),
@@ -231,21 +232,23 @@ def _convert_base_sync(
                 )
                 TO '{tmp_path}'
                 WITH (FORMAT 'PARQUET', COMPRESSION 'ZSTD', COMPRESSION_LEVEL {settings.parquet_compression_level}, ROW_GROUP_SIZE {settings.parquet_row_group_size});
-            """)
+            """
+            conn.execute(sql_step1)
 
             # Step 2: Spatial join with super layer → final output
             logger.info(
                 f"Step 2: Spatial join with super layer "
                 f"({super_layer_source}) on field '{super_field}'"
             )
-            conn.execute(f"""
+            sql_super = f"""
                 CREATE TABLE _super AS
                 SELECT
                     geom AS _poly,
                     {super_field}
                 FROM ST_Read('{super_layer_source}');
-            """)
-            conn.execute(f"""
+            """
+            conn.execute(sql_super)
+            sql_join = f"""
                 COPY (
                     SELECT
                         b.* EXCLUDE (_geom, _rn),
@@ -263,10 +266,11 @@ def _convert_base_sync(
                 )
                 TO '{output_path}'
                 WITH (FORMAT 'PARQUET', COMPRESSION 'ZSTD', COMPRESSION_LEVEL {settings.parquet_compression_level}, ROW_GROUP_SIZE {settings.parquet_row_group_size});
-            """)
+            """
+            conn.execute(sql_join)
         else:
             # Single-step: Hilbert sort only (no super layer)
-            conn.execute(f"""
+            sql_single = f"""
                 COPY (
                     SELECT
                         * EXCLUDE (geom),
@@ -276,7 +280,8 @@ def _convert_base_sync(
                 )
                 TO '{output_path}'
                 WITH (FORMAT 'PARQUET', COMPRESSION 'ZSTD', COMPRESSION_LEVEL {settings.parquet_compression_level}, ROW_GROUP_SIZE {settings.parquet_row_group_size});
-            """)
+            """
+            conn.execute(sql_single)
 
         logger.info(f"Base layer written to {output_path}")
         return True
@@ -293,7 +298,9 @@ def _convert_base_sync(
             with contextlib.suppress(Exception):
                 Path(tmp_path).unlink(missing_ok=True)
         import glob
+        import tempfile
 
-        for f in glob.glob("/tmp/duckdb_*.db"):
+        tmp_pattern = str(Path(tempfile.gettempdir()) / "duckdb_*.db")
+        for f in glob.glob(tmp_pattern):
             with contextlib.suppress(Exception):
                 Path(f).unlink()

@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     base_geoserver: str = ""
 
     # Working Directory
-    temp_path: str = "/tmp/"
+    temp_path: str = "/tmp/"  # noqa: S108
 
     # Raw Admin Bounds Files
     tehsil_bounds: str = ""
@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     # DuckDB
     duckdb_memory_limit: str = "12GB"
     duckdb_threads: int = 4
-    duckdb_temp_dir: str = "/tmp/duckdb_spill"
+    duckdb_temp_dir: str = "/tmp/duckdb_spill"  # noqa: S108
 
     # Parquet Output Configuration
     parquet_row_group_size: int = 280000

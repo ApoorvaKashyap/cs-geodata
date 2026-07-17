@@ -1,4 +1,4 @@
-from random import randint
+import secrets
 from time import sleep
 
 from loguru import logger
@@ -6,4 +6,4 @@ from loguru import logger
 
 def sim_work() -> None:
     logger.info("Simulating work...")
-    sleep(randint(1, 20))
+    sleep(1 + secrets.randbelow(20))

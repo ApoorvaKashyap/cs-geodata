@@ -1,7 +1,10 @@
 import json
+import logging
 import re
 
 import polars as pl
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Column classification regexes
@@ -365,7 +368,8 @@ def unnest_json_cols(layer: pl.LazyFrame) -> pl.LazyFrame:
                         fields.append(pl.Field(k, pl.String))
                 dtype = pl.Struct(fields)
                 break
-            except Exception:
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Could not sniff JSON schema from column %s: %s", c, exc)
                 continue
 
     if not keys or not dtype:
@@ -376,7 +380,8 @@ def unnest_json_cols(layer: pl.LazyFrame) -> pl.LazyFrame:
     for c in json_cols:
         parsed = pl.col(c).str.json_decode(dtype)
         match = pattern.match(c)
-        assert match is not None  # json_cols only contains columns that matched pattern
+        if match is None:  # json_cols only contains columns that matched pattern
+            raise RuntimeError(f"Pattern unexpectedly did not match column: {c!r}")
         prefix = match.group(1) or ""
         suffix = match.group(2)
 

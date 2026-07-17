@@ -1,4 +1,5 @@
-import random
+import tempfile
+import uuid
 
 import duckdb
 from duckdb import DuckDBPyConnection
@@ -21,7 +22,11 @@ def init_duckdb() -> DuckDBPyConnection:
     """
     extensions = ["httpfs", "spatial", "aws"]
     try:
-        conn = duckdb.connect(f"/tmp/duckdb_{random.randint(0, 10000)}.db")
+        tmp_db_fd, tmp_db_path = tempfile.mkstemp(suffix=".db", prefix="duckdb_")
+        import os
+
+        os.close(tmp_db_fd)
+        conn = duckdb.connect(tmp_db_path)
         for ext in extensions:
             conn.install_extension(ext)
             conn.load_extension(ext)
@@ -36,8 +41,9 @@ def init_duckdb() -> DuckDBPyConnection:
             );""")
         conn.execute(f"SET memory_limit = '{settings.duckdb_memory_limit}'")
         conn.execute(f"SET threads = {settings.duckdb_threads}")
+        unique_suffix = uuid.uuid4().hex[:8]
         conn.execute(
-            f"SET temp_directory = '{settings.duckdb_temp_dir}_{random.randint(0, 10000)}'"
+            f"SET temp_directory = '{settings.duckdb_temp_dir}_{unique_suffix}'"
         )
         conn.execute("SET preserve_insertion_order = false")
 

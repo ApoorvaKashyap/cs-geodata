@@ -387,7 +387,7 @@ async def _write_split_parquets(
         # VIEW = zero-copy; DuckDB pushes column selection down into the parquet
         # scan so each COPY query only reads the columns it actually needs.
         conn.execute(
-            f"CREATE VIEW merged AS SELECT * FROM read_parquet('{merged_path}')"
+            f"CREATE VIEW merged AS SELECT * FROM read_parquet('{merged_path}')"  # noqa: S608
         )
 
         logger.info(f"Writing static GeoParquet → {output_path}/static/")

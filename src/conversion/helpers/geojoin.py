@@ -87,7 +87,7 @@ def fill_missing_admin_boundaries(
     conn = init_duckdb()
     try:
         # Load tehsil boundaries once into a persistent DuckDB table.
-        conn.execute(f"""
+        sql_tehsils = f"""
             CREATE TABLE tehsils AS
             SELECT
                 STATE    AS state,
@@ -95,7 +95,8 @@ def fill_missing_admin_boundaries(
                 TEHSIL   AS tehsil,
                 geom     AS geometry
             FROM ST_Read('{tehsils_path}')
-        """)
+        """
+        conn.execute(sql_tehsils)
         logger.info("Tehsil boundaries loaded into DuckDB")
 
         lookup_frames: list[pl.DataFrame] = []
