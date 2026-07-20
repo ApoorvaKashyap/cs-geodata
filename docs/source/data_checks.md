@@ -64,6 +64,6 @@ Some data columns contain serialized JSON dictionaries.
 ## 6. Temporal Column Classification (`classify_columns`)
 When data frames are merged, the columns are grouped into temporal buckets so they can be structured appropriately.
 * **Static**: Core identity columns (e.g., `mws_id`, `geometry`, `state`) that are preserved across time.
-* **Fortnightly**: Columns ending with an ISO date (`YYYY-MM-DD`).
+* **Sub-Annual**: Columns ending with an ISO date (`YYYY-MM-DD`).
 * **Annual**: Columns containing a single year or a year range (e.g., `2019_2020` or `2023`).
 * **Dropped**: Columns containing the substring `"net"` are considered derived data and are dropped entirely during classification.

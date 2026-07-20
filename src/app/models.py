@@ -45,10 +45,6 @@ class LayerDescriptor(BaseModel):
         default_factory=dict,
         description="Dictionary mapping column names (or globs) to a multiplication factor.",
     )
-    resolution: str | None = Field(
-        default=None,
-        description="Temporal resolution hint, e.g. 'fortnightly'.",
-    )
 
 
 class LayerConversionRequest(BaseModel):

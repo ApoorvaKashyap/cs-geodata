@@ -38,7 +38,7 @@ COMMON_COLS = [
 
 # Regex used to extract the leading four-digit year from a year suffix
 _FIRST_YEAR_RE = re.compile(r"\d{4}")
-# Regex used to extract the trailing ISO date from a fortnightly column name
+# Regex used to extract the trailing ISO date from a sub-annual column name
 _DATE_SUFFIX_RE = re.compile(r"(\d{1,4}-\d{1,2}-\d{1,4})$")
 # Regex used to extract the trailing year / year-range from an annual column name
 _YEAR_SUFFIX_RE = re.compile(r"(\d{4}[_-]\d{4}|\d{4})$")
@@ -139,7 +139,7 @@ async def run_pipeline(request: LayerConversionRequest) -> None:
     into three flat Parquet files:
 
     * ``static.parquet``   — geometry + identity + non-temporal attributes
-    * ``fortnightly/``     — melted long, one row per (entity_key, date), partitioned by year
+    * ``sub-annual/``      — melted long, one row per (entity_key, date), partitioned by year
     * ``annual/``          — melted long, one row per (entity_key, year), partitioned by year
 
     Args:
@@ -364,7 +364,7 @@ async def _write_split_parquets(
     entity_key: str,
     partition_by: str | None = None,
 ) -> None:
-    """Classify columns and write static, fortnightly, and annual Parquet files.
+    """Classify columns and write static, sub-annual, and annual Parquet files.
 
     Reads from a local merged Parquet file and writes output via DuckDB's
     native partitioned COPY, which handles Hive-style directory trees and
@@ -374,7 +374,7 @@ async def _write_split_parquets(
     as a Hive-partitioned directory tree with that column as the outer level:
 
     * ``static/{partition_by}={val}/part-0.parquet``
-    * ``fortnightly/{partition_by}={val}/year=YYYY/``
+    * ``sub-annual/{partition_by}={val}/year=YYYY/``
     * ``annual/{partition_by}={val}/year=YYYY/``
 
     Args:
@@ -388,11 +388,11 @@ async def _write_split_parquets(
         keep_always.append(entity_key)
     if partition_by and partition_by not in keep_always:
         keep_always.append(partition_by)
-    static_cols, fortnightly_cols, annual_cols = classify_columns(all_cols, keep_always)
+    static_cols, sub_annual_cols, annual_cols = classify_columns(all_cols, keep_always)
 
     logger.info(
         f"Column classification — static: {len(static_cols)}, "
-        f"fortnightly: {len(fortnightly_cols)}, annual: {len(annual_cols)}"
+        f"sub-annual: {len(sub_annual_cols)}, annual: {len(annual_cols)}"
     )
 
     if not output_path.startswith("s3://"):
@@ -417,20 +417,20 @@ async def _write_split_parquets(
             entity_key=entity_key,
         )
 
-        if fortnightly_cols:
+        if sub_annual_cols:
             non_geo_keep = [c for c in keep_always if c != "geometry"]
-            logger.info(f"Writing fortnightly parquet → {output_path}/fortnightly")
+            logger.info(f"Writing sub-annual parquet → {output_path}/sub-annual")
             _write_temporal_parquet_polars(
                 merged_path,
-                "fortnightly",
-                fortnightly_cols,
+                "sub-annual",
+                sub_annual_cols,
                 non_geo_keep,
-                f"{output_path}/fortnightly",
+                f"{output_path}/sub-annual",
                 partition_by,
                 entity_key=entity_key,
             )
         else:
-            logger.info("No fortnightly columns detected — skipping fortnightly output")
+            logger.info("No sub-annual columns detected — skipping sub-annual output")
 
         if annual_cols:
             non_geo_keep = [c for c in keep_always if c != "geometry"]
@@ -678,7 +678,7 @@ def _apply_bloom_filters_to_dir(dir_path: str, entity_key: str) -> None:
 
     Polars ``sink_parquet`` does not expose Bloom filter options natively, so
     this function provides a post-processing pass for temporal (annual /
-    fortnightly) outputs.  Each file is rewritten in-place via PyArrow with
+    sub-annual) outputs.  Each file is rewritten in-place via PyArrow with
     Bloom filters applied to the columns selected by
     :func:`_select_bloom_filter_cols`.
 
@@ -815,7 +815,7 @@ def _write_temporal_parquet_polars(
     partition_by: str | None = None,
     entity_key: str = "",
 ) -> None:
-    """Write melted temporal (fortnightly or annual) output using Polars.
+    """Write melted temporal (sub-annual or annual) output using Polars.
 
     Groups columns by their date/year suffix. Each time-period slice is sunk
     to a temporary Parquet file individually, avoiding an N × 15M-row concat
@@ -824,14 +824,14 @@ def _write_temporal_parquet_polars(
 
     Args:
         merged_path (str): Path to the local merged Parquet file.
-        kind (str): Either ``'fortnightly'`` or ``'annual'``.
+        kind (str): Either ``'sub-annual'`` or ``'annual'``.
         temporal_cols (list[str]): The list of wide temporal column names to melt.
         keep_cols (list[str]): Identity columns to carry forward in each output row.
         base_path (str): Root output directory (S3 or local).
         partition_by (str | None): Optional outer Hive partition column.
     """
-    if kind == "fortnightly":
-        groups = _group_fortnightly_cols(temporal_cols)
+    if kind == "sub-annual":
+        groups = _group_sub_annual_cols(temporal_cols)
     else:
         groups = _group_annual_cols(temporal_cols)
 
@@ -868,7 +868,7 @@ def _write_temporal_parquet_polars(
 
     # Enforce strict column ordering
     all_final_cols = keep_cols.copy()
-    if kind == "fortnightly":
+    if kind == "sub-annual":
         all_final_cols.extend(["date", "year"])
     else:
         all_final_cols.append("year")
@@ -877,7 +877,7 @@ def _write_temporal_parquet_polars(
     partition_cols = []
     if partition_by:
         partition_cols.append(partition_by)
-    if kind == "fortnightly":
+    if kind == "sub-annual":
         partition_cols.append("year")
 
     if not partition_cols and not base_path.endswith(".parquet"):
@@ -908,7 +908,7 @@ def _write_temporal_parquet_polars(
     try:
         for time_val, var_map in groups.items():
             exprs = [pl.col(c) for c in keep_cols]
-            if kind == "fortnightly":
+            if kind == "sub-annual":
                 exprs.append(
                     pl.lit(time_val).str.strptime(pl.Date, "%Y-%m-%d").alias("date")
                 )
@@ -981,11 +981,11 @@ def _write_temporal_parquet_polars(
             shutil.rmtree(tmp_local, ignore_errors=True)
 
 
-def _group_fortnightly_cols(cols: list[str]) -> dict[str, dict[str, str]]:
-    """Group fortnightly column names by their ISO date suffix.
+def _group_sub_annual_cols(cols: list[str]) -> dict[str, dict[str, str]]:
+    """Group sub-annual column names by their ISO date suffix.
 
     Args:
-        cols (list[str]): The list of fortnightly column names.
+        cols (list[str]): The list of sub-annual column names.
 
     Returns:
         dict[str, dict[str, str]]: ``{date_str -> {var_name -> orig_col_name}}``

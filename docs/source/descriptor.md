@@ -54,7 +54,6 @@ Each layer is declared as an array-of-tables entry. One entry must match the `ba
 | `drop` | list[string] | | Column names to drop after reading. |
 | `rename` | table | | Column rename map. Supports glob patterns (e.g. `k_* = "kharif_*"`). Case-insensitive. |
 | `scale` | table | | Map of column name (or glob) to a float multiplication factor. |
-| `resolution` | string | | Temporal resolution hint. Set to `"fortnightly"` for fortnightly layers. |
 
 ### `type = "item"` — Base / Pan-India Layer
 
@@ -112,7 +111,7 @@ The pipeline writes three output directories under `output_path`:
 ```
 output_path/
 ├── static/          # GeoParquet — geometry + identity + non-temporal columns
-├── fortnightly/     # Long Parquet — one row per (entity_key, date)
+├── sub-annual/      # Long Parquet — one row per (entity_key, date)
 │   └── year=YYYY/
 └── annual/          # Long Parquet — one row per (entity_key, year)
     └── year=YYYY/

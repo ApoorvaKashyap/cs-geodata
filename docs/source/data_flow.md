@@ -104,7 +104,7 @@ This correctly handles large entities (like watersheds) that span multiple bound
 | Bucket | Rule |
 |---|---|
 | **Static** | `COMMON_COLS` (`mws_id`, `geometry`, `tehsil`, `district`, `state`, `area_in_ha`), configured `entity_key`, and any unrecognised columns. |
-| **Fortnightly** | Name ends with ISO date (`YYYY-MM-DD`). |
+| **Sub-Annual** | Name ends with ISO date (`YYYY-MM-DD`). |
 | **Annual** | Name ends with year or year-range (`2023` or `2019_2020`). |
 | **Dropped** | Name contains `"net"` (derived data). |
 
@@ -113,7 +113,7 @@ Three output directories are written under `output_path`:
 ```
 output_path/
 ├── static/          # GeoParquet 1.1.0 with bbox struct
-├── fortnightly/     # Long Parquet — one row per (entity_key, date)
+├── sub-annual/      # Long Parquet — one row per (entity_key, date)
 │   └── year=YYYY/
 └── annual/          # Long Parquet — one row per (entity_key, year)
     └── year=YYYY/
