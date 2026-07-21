@@ -146,6 +146,7 @@ def _extract_location_meta(
         layer_key for layer_key in layer_results if layer_key not in preferred_order
     ]
 
+    meta_frames = []
     for layer_name in ordered:
         if layer_name not in layer_results:
             continue
@@ -154,21 +155,28 @@ def _extract_location_meta(
         schema = layer_df.collect_schema().names()
 
         if all(c in schema for c in [entity_key, "tehsil", "district", "state"]):
-            logger.info(f"Using '{layer_name}' as location metadata source")
-            meta = layer_df.select([entity_key, "tehsil", "district", "state"]).unique(
-                subset=[entity_key]
+            meta_frames.append(
+                layer_df.select([entity_key, "tehsil", "district", "state"])
             )
 
-            count = meta.select(pl.len()).collect()[0, 0]
-            logger.info(
-                f"Location metadata: {count} unique {entity_key} pairs from '{layer_name}'"
-            )
-            return meta
+    if not meta_frames:
+        raise ValueError(
+            f"No layer contains all of: {entity_key}, tehsil, district, state. "
+            "Cannot extract location metadata."
+        )
 
-    raise ValueError(
-        f"No layer contains all of: {entity_key}, tehsil, district, state. "
-        "Cannot extract location metadata."
+    logger.info(f"Combining location metadata from {len(meta_frames)} layer(s)")
+    meta = (
+        pl.concat(meta_frames)
+        .drop_nulls(subset=[entity_key])
+        .unique(subset=[entity_key], keep="first")
     )
+
+    count = meta.select(pl.len()).collect()[0, 0]
+    logger.info(
+        f"Location metadata: {count} unique {entity_key} pairs extracted globally"
+    )
+    return meta
 
 
 def _get_missing_entity_ids(
