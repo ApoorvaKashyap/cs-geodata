@@ -1,3 +1,5 @@
+"""DuckDB connection and extension initialization utilities."""
+
 import tempfile
 import uuid
 

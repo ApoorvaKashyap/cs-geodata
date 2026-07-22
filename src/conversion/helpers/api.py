@@ -1,3 +1,5 @@
+"""API helpers for asynchronous data conversion."""
+
 import asyncio
 import contextlib
 import warnings

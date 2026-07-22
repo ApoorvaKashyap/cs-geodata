@@ -1,5 +1,8 @@
+"""Redis Queue (RQ) configuration and job fetch helpers."""
+
 from loguru import logger
 from redis.exceptions import ConnectionError as RedisConnectionError
+
 from rq import Queue
 
 from src.utils.redis_client import get_redis_client
@@ -28,6 +31,15 @@ lq, bq, mq = _make_queues()
 
 
 async def get_status(task_id: str) -> dict[str, str]:
+    """Retrieve the status of a specific RQ task.
+
+    Args:
+        task_id: The unique identifier of the task.
+
+    Returns:
+        A dictionary containing the task ID and its current status.
+
+    """
     task = lq.fetch_job(task_id)
     if not task:
         task = bq.fetch_job(task_id)

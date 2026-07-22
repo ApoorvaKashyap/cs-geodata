@@ -1,3 +1,5 @@
+"""RQ worker entry points and API route handlers for layer operations."""
+
 from loguru import logger
 
 from src.app.models import (
@@ -12,6 +14,15 @@ from src.work.work_queue import bq, lq
 
 
 def handle_layers(request: ConversionRequest) -> dict:
+    """Enqueue a layer conversion job.
+
+    Args:
+        request: The API request payload.
+
+    Returns:
+        A dictionary containing the task ID and status.
+
+    """
     logger.info(f"Enqueueing conversion job for descriptor={request.descriptor_url}")
     tid = lq.enqueue(layer_conversion, request, job_timeout=86400)
     return {
@@ -48,6 +59,15 @@ def layer_conversion(request: ConversionRequest) -> None:
 
 
 def handle_standardise(request: StandardiseRequest) -> dict:
+    """Enqueue a standardise conversion job.
+
+    Args:
+        request: The API request payload.
+
+    Returns:
+        A dictionary containing the task ID and status.
+
+    """
     logger.info(f"Enqueueing standardise job for output={request.output_path}")
     tid = lq.enqueue(standardise_conversion, request, job_timeout=86400)
     return {
@@ -75,6 +95,15 @@ def standardise_conversion(request: StandardiseRequest) -> None:
 
 
 def base_layer_cache(request: BaseLayers) -> dict[str, str]:
+    """Enqueue a base layer caching job.
+
+    Args:
+        request: The API request payload.
+
+    Returns:
+        A dictionary containing the task ID and status.
+
+    """
     logger.info(f"Starting base layer cache for {request}")
     from rq.job import Job
 

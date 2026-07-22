@@ -1,3 +1,5 @@
+"""Core conversion algorithms and Parquet generation pipelines."""
+
 import asyncio
 import json
 import re

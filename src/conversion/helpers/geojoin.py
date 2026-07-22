@@ -1,3 +1,5 @@
+"""Spatial join and boundary filling utilities."""
+
 import polars as pl
 from loguru import logger
 
@@ -12,7 +14,12 @@ _PARENS_RE = r"[()]"
 
 
 def _normalise_admin_col(col: pl.Expr) -> pl.Expr:
-    """Strip disputed-territory suffixes/prefixes and apply title-case to an admin name column."""
+    """Strip disputed-territory suffixes/prefixes and apply title-case to an admin name column.
+
+    Args:
+        col: Polars expression representing the column.
+
+    """
     return (
         col.str.replace(_DISPUTED_SUFFIX_RE, "")
         .str.replace(_DISPUTED_PREFIX_RE, "")

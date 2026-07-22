@@ -1,3 +1,5 @@
+"""Data models and settings configurations for cs-geodata."""
+
 import tomllib
 from typing import Annotated, Literal
 
@@ -48,6 +50,8 @@ class LayerDescriptor(BaseModel):
 
 
 class StaticParquetFileConfig(BaseModel):
+    """Configuration for static Parquet files."""
+
     partition_by: list[str] | None = Field(
         default=None, description="Ordered list of Hive partition columns."
     )
@@ -57,6 +61,8 @@ class StaticParquetFileConfig(BaseModel):
 
 
 class TemporalParquetFileConfig(BaseModel):
+    """Configuration for temporal Parquet files (annual or sub-annual)."""
+
     partition_by: list[str] | None = Field(
         default=None, description="Ordered list of Hive partition columns."
     )
@@ -66,6 +72,8 @@ class TemporalParquetFileConfig(BaseModel):
 
 
 class ConvertedFilesConfig(BaseModel):
+    """Configuration for static, annual, and sub-annual partitioned Parquet files."""
+
     static: StaticParquetFileConfig | None = Field(
         default_factory=StaticParquetFileConfig
     )
@@ -192,6 +200,8 @@ class ConversionRequest(BaseModel):
 
 
 class BaseLayers(BaseModel):
+    """API request payload for converting and caching a base layer."""
+
     base_layer_source: str = Field(
         description="Path or S3 URI to the base layer.",
     )

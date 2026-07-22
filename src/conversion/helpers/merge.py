@@ -1,3 +1,5 @@
+"""Algorithms for merging base and attribute layers."""
+
 import warnings
 
 import polars as pl
