@@ -43,8 +43,6 @@ class Settings(BaseSettings):
     duckdb_temp_dir: str = "/tmp/duckdb_spill"  # noqa: S108
 
     # Parquet Output Configuration
-    parquet_row_group_size: int = 280000
-    static_parquet_row_group_size: int = 22000
     parquet_compression_level: int = 15
 
     # Pipeline testing / sampling

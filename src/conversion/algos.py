@@ -240,6 +240,11 @@ async def run_pipeline(request: LayerConversionRequest) -> None:
     logger.info("Processing layers")
     layer_results = await _process_layer(request, tehsils)
 
+    c_files = request.converted_files
+    temporal_rgs = (
+        c_files.annual.row_group_size if c_files and c_files.annual else 280000
+    )
+
     logger.info("Post-processing and materializing layers")
     dynamic_common_cols = list(COMMON_COLS)
     if request.key not in dynamic_common_cols:
@@ -258,7 +263,7 @@ async def run_pipeline(request: LayerConversionRequest) -> None:
             layer_path,
             compression="zstd",
             compression_level=settings.parquet_compression_level,
-            row_group_size=settings.parquet_row_group_size,
+            row_group_size=temporal_rgs,
         )
         layer_results[layer] = pl.scan_parquet(layer_path)
         logger.info(f"Layer '{layer}' materialized")
@@ -326,7 +331,7 @@ async def run_pipeline(request: LayerConversionRequest) -> None:
         merged_path,
         compression="zstd",
         compression_level=settings.parquet_compression_level,
-        row_group_size=settings.parquet_row_group_size,
+        row_group_size=temporal_rgs,
     )
     logger.info("Merged frame materialized")
 
@@ -349,7 +354,7 @@ async def run_pipeline(request: LayerConversionRequest) -> None:
             tmp_admin_path,
             compression="zstd",
             compression_level=settings.parquet_compression_level,
-            row_group_size=settings.parquet_row_group_size,
+            row_group_size=temporal_rgs,
         )
         import shutil
 
@@ -454,6 +459,9 @@ async def _write_split_parquets(
                 static_cols,
                 static_dir,
                 partition_by=c_files.static.partition_by if c_files.static else None,
+                row_group_size=c_files.static.row_group_size
+                if c_files.static
+                else 22000,
                 entity_key=entity_key,
             )
 
@@ -469,6 +477,9 @@ async def _write_split_parquets(
                 partition_by=c_files.sub_annual.partition_by
                 if c_files.sub_annual
                 else None,
+                row_group_size=c_files.sub_annual.row_group_size
+                if c_files.sub_annual
+                else 280000,
                 entity_key=entity_key,
             )
         else:
@@ -484,6 +495,9 @@ async def _write_split_parquets(
                 non_geo_keep,
                 f"{output_path}/annual",
                 partition_by=c_files.annual.partition_by if c_files.annual else None,
+                row_group_size=c_files.annual.row_group_size
+                if c_files.annual
+                else 280000,
                 entity_key=entity_key,
             )
         else:
@@ -498,6 +512,7 @@ async def _write_static_geoparquet_duckdb(
     static_cols: list[str],
     dir_path: str,
     partition_by: list[str] | None = None,
+    row_group_size: int = 22000,
     entity_key: str = "",
 ) -> None:
     """Write the static columns as GeoParquet file(s) via DuckDB.
@@ -524,6 +539,7 @@ async def _write_static_geoparquet_duckdb(
         static_cols (list[str]): List of column names belonging to the static layer.
         dir_path (str): Output directory (or S3 prefix) to write Parquet chunks.
         partition_by (list[str] | None): Optional list of Hive partition columns.
+        row_group_size (int): Target row group size for the output Parquet files.
         entity_key (str): Entity key for bloom filter creation.
     """
     import shutil
@@ -577,7 +593,7 @@ async def _write_static_geoparquet_duckdb(
         TO '{copy_target}'
         WITH (
             FORMAT 'PARQUET',
-            ROW_GROUP_SIZE {settings.static_parquet_row_group_size},
+            ROW_GROUP_SIZE {row_group_size},
             COMPRESSION 'ZSTD',
             COMPRESSION_LEVEL {settings.parquet_compression_level}
             {(", OVERWRITE_OR_IGNORE true, " + partition_by_clause) if partition_by_clause else ""}
@@ -860,6 +876,7 @@ def _write_temporal_parquet_polars(
     keep_always: list[str],
     base_path: str,
     partition_by: list[str] | None = None,
+    row_group_size: int = 280000,
     entity_key: str = "",
 ) -> None:
     """Write melted temporal (sub-annual or annual) output using Polars.
@@ -880,6 +897,7 @@ def _write_temporal_parquet_polars(
         keep_always (list[str]): List of static columns to repeat in each temporal record.
         base_path (str): Output directory.
         partition_by (list[str] | None): Optional list of outer Hive partition columns.
+        row_group_size (int): Target row group size for the output Parquet files.
         entity_key (str): Entity key for bloom filter creation.
     """
     if kind == "sub-annual":
@@ -976,7 +994,7 @@ def _write_temporal_parquet_polars(
                 slice_path,
                 compression="zstd",
                 compression_level=settings.parquet_compression_level,
-                row_group_size=settings.parquet_row_group_size,
+                row_group_size=row_group_size,
             )
             slice_paths.append(slice_path)
 
@@ -993,7 +1011,7 @@ def _write_temporal_parquet_polars(
             target_path,
             compression="zstd",
             compression_level=settings.parquet_compression_level,
-            row_group_size=settings.parquet_row_group_size,
+            row_group_size=row_group_size,
         )
     finally:
         shutil.rmtree(slices_tmp, ignore_errors=True)
@@ -1298,6 +1316,9 @@ async def run_standardise(request: StandardiseRequest) -> None:
 
         copy_target = write_target if static_pb else str(tmp_local / "part-0.parquet")
 
+        static_rgs = (
+            c_files.static.row_group_size if c_files and c_files.static else 22000
+        )
         sql = f"""
             COPY (
                 SELECT
@@ -1310,7 +1331,7 @@ async def run_standardise(request: StandardiseRequest) -> None:
             TO '{copy_target}'
             WITH (
                 FORMAT 'PARQUET',
-                ROW_GROUP_SIZE {settings.static_parquet_row_group_size},
+                ROW_GROUP_SIZE {static_rgs},
                 COMPRESSION 'ZSTD',
                 COMPRESSION_LEVEL {settings.parquet_compression_level}
                 {(", OVERWRITE_OR_IGNORE true, " + partition_by_clause) if partition_by_clause else ""}
@@ -1361,11 +1382,21 @@ async def run_standardise(request: StandardiseRequest) -> None:
                         if c_files and c_files.annual
                         else None
                     )
+                    temp_rgs = (
+                        c_files.annual.row_group_size
+                        if c_files and c_files.annual
+                        else 280000
+                    )
                 else:
                     temp_pb = (
                         c_files.sub_annual.partition_by
                         if c_files and c_files.sub_annual
                         else None
+                    )
+                    temp_rgs = (
+                        c_files.sub_annual.row_group_size
+                        if c_files and c_files.sub_annual
+                        else 280000
                     )
 
                 logger.info(
@@ -1398,7 +1429,7 @@ async def run_standardise(request: StandardiseRequest) -> None:
                         target_path,
                         compression="zstd",
                         compression_level=settings.parquet_compression_level,
-                        row_group_size=settings.parquet_row_group_size,
+                        row_group_size=temp_rgs,
                     )
                     _apply_bloom_filters_to_dir(out_path, request.key or "")
                     _normalize_parquet_filenames(out_path)
@@ -1408,7 +1439,7 @@ async def run_standardise(request: StandardiseRequest) -> None:
                         file_out_path,
                         compression="zstd",
                         compression_level=settings.parquet_compression_level,
-                        row_group_size=settings.parquet_row_group_size,
+                        row_group_size=temp_rgs,
                     )
                     _apply_bloom_filters_to_dir(file_out_path, request.key or "")
                     _normalize_parquet_filenames(file_out_path)

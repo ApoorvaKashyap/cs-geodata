@@ -47,16 +47,34 @@ class LayerDescriptor(BaseModel):
     )
 
 
-class ParquetFileConfig(BaseModel):
+class StaticParquetFileConfig(BaseModel):
     partition_by: list[str] | None = Field(
         default=None, description="Ordered list of Hive partition columns."
+    )
+    row_group_size: int = Field(
+        default=22000, description="Row group size for Parquet."
+    )
+
+
+class TemporalParquetFileConfig(BaseModel):
+    partition_by: list[str] | None = Field(
+        default=None, description="Ordered list of Hive partition columns."
+    )
+    row_group_size: int = Field(
+        default=280000, description="Row group size for Parquet."
     )
 
 
 class ConvertedFilesConfig(BaseModel):
-    static: ParquetFileConfig | None = Field(default_factory=ParquetFileConfig)
-    annual: ParquetFileConfig | None = Field(default_factory=ParquetFileConfig)
-    sub_annual: ParquetFileConfig | None = Field(default_factory=ParquetFileConfig)
+    static: StaticParquetFileConfig | None = Field(
+        default_factory=StaticParquetFileConfig
+    )
+    annual: TemporalParquetFileConfig | None = Field(
+        default_factory=TemporalParquetFileConfig
+    )
+    sub_annual: TemporalParquetFileConfig | None = Field(
+        default_factory=TemporalParquetFileConfig
+    )
 
 
 class LayerConversionRequest(BaseModel):
