@@ -9,7 +9,13 @@ import polars as pl
 import polars_st as st
 from loguru import logger
 
-from src.app.models import LayerConversionRequest, StandardiseRequest
+from typing import Literal
+
+from src.app.models import (
+    LayerConversionRequest,
+    StandardiseRequest,
+    ConvertedFilesConfig,
+)
 from src.conversion.helpers.api import convert_base
 from src.conversion.helpers.cleaners import (
     classify_columns,
@@ -142,6 +148,11 @@ async def run_pipeline(request: LayerConversionRequest) -> None:
     * ``sub-annual/``      — melted long, one row per (entity_key, date), partitioned by year
     * ``annual/``          — melted long, one row per (entity_key, year), partitioned by year
 
+    .. note::
+        If partition columns are specified in the `converted_files` config, rows with null values
+        in any of those columns will be dropped. Please check the logs if expected data is missing
+        (this usually implies geometries fall out of the coverage area).
+
     Args:
         request (LayerConversionRequest): Configuration for the pipeline run, including layers, paths,
             version bounds, and column mappings.
@@ -263,26 +274,46 @@ async def run_pipeline(request: LayerConversionRequest) -> None:
         )
 
     logger.info("Merging all layers onto base")
-    if request.partition_by:
+    partition_cols = set()
+    if request.converted_files:
+        if (
+            request.converted_files.static
+            and request.converted_files.static.partition_by
+        ):
+            partition_cols.update(request.converted_files.static.partition_by)
+        if (
+            request.converted_files.annual
+            and request.converted_files.annual.partition_by
+        ):
+            partition_cols.update(request.converted_files.annual.partition_by)
+        if (
+            request.converted_files.sub_annual
+            and request.converted_files.sub_annual.partition_by
+        ):
+            partition_cols.update(request.converted_files.sub_annual.partition_by)
+
+    if partition_cols:
         base_schema = base.collect_schema().names()
-        if request.partition_by not in base_schema:
-            logger.warning(
-                f"partition_by column '{request.partition_by}' does not exist on the "
-                "base frame — skipping null-row filter. Ensure a super-layer is "
-                "configured if you need this column populated."
-            )
-        else:
-            null_count = (
-                base.filter(pl.col(request.partition_by).is_null())
-                .collect(engine="streaming")
-                .height
-            )
-            if null_count > 0:
+        for p_col in partition_cols:
+            if p_col not in base_schema:
                 logger.warning(
-                    f"Dropping {null_count} rows with null {request.partition_by} "
-                    f"(out of coverage area)"
+                    f"partition_by column '{p_col}' does not exist on the "
+                    "base frame — skipping null-row filter. Ensure a super-layer is "
+                    "configured if you need this column populated."
                 )
-                base = base.filter(pl.col(request.partition_by).is_not_null())
+            else:
+                null_count = (
+                    base.filter(pl.col(p_col).is_null())
+                    .collect(engine="streaming")
+                    .height
+                )
+                if null_count > 0:
+                    logger.warning(
+                        f"Dropping {null_count} rows with null {p_col}. "
+                        f"Note: Check this if any expected data is missing! "
+                        f"(Usually implies geometries out of coverage area)"
+                    )
+                    base = base.filter(pl.col(p_col).is_not_null())
 
     merged = merge_all_layers(layer_results, base, entity_key=request.key)
 
@@ -327,7 +358,7 @@ async def run_pipeline(request: LayerConversionRequest) -> None:
     logger.info(f"Writing split Parquet outputs to {request.output_path}")
     all_cols = pl.scan_parquet(merged_path).collect_schema().names()
     await _write_split_parquets(
-        merged_path, request.output_path, all_cols, request.key, request.partition_by
+        merged_path, request.output_path, all_cols, request.key, request.converted_files
     )
 
     # Write metadata JSON
@@ -360,9 +391,9 @@ async def run_pipeline(request: LayerConversionRequest) -> None:
 async def _write_split_parquets(
     merged_path: str,
     output_path: str,
-    all_cols: list[str],
+    all_final_cols: list[str],
     entity_key: str,
-    partition_by: str | None = None,
+    converted_files: ConvertedFilesConfig | None = None,
 ) -> None:
     """Classify columns and write static, sub-annual, and annual Parquet files.
 
@@ -380,15 +411,17 @@ async def _write_split_parquets(
     Args:
         merged_path (str): Path to the local materialized merged Parquet file.
         output_path (str): Target S3 or local directory for all output files.
-        all_cols (list[str]): List of all column names in the merged frame.
-        partition_by (str | None): Optional outer Hive partition column name.
+        all_final_cols (list[str]): List of all column names in the merged frame.
+        entity_key (str): Entity primary-key column name.
+        converted_files (ConvertedFilesConfig | None): Configuration for output partitions.
     """
-    keep_always = [c for c in COMMON_COLS if c in all_cols]
-    if entity_key and entity_key not in keep_always and entity_key in all_cols:
+    keep_always = [c for c in COMMON_COLS if c in all_final_cols]
+    if entity_key and entity_key not in keep_always and entity_key in all_final_cols:
         keep_always.append(entity_key)
-    if partition_by and partition_by not in keep_always:
-        keep_always.append(partition_by)
-    static_cols, sub_annual_cols, annual_cols = classify_columns(all_cols, keep_always)
+
+    static_cols, sub_annual_cols, annual_cols = classify_columns(
+        all_final_cols, keep_always
+    )
 
     logger.info(
         f"Column classification — static: {len(static_cols)}, "
@@ -400,6 +433,12 @@ async def _write_split_parquets(
 
         os.makedirs(output_path, exist_ok=True)
 
+    static_dir = f"{output_path}/static"
+
+    from src.app.models import ConvertedFilesConfig
+
+    c_files = converted_files or ConvertedFilesConfig()
+
     conn = init_duckdb()
     try:
         # VIEW = zero-copy; DuckDB pushes column selection down into the parquet
@@ -408,14 +447,15 @@ async def _write_split_parquets(
             f"CREATE VIEW merged AS SELECT * FROM read_parquet('{merged_path}')"  # noqa: S608
         )
 
-        logger.info(f"Writing static GeoParquet → {output_path}/static/")
-        await _write_static_geoparquet_duckdb(
-            conn,
-            static_cols,
-            f"{output_path}/static",
-            partition_by,
-            entity_key=entity_key,
-        )
+        if static_cols:
+            logger.info(f"Writing static GeoParquet → {static_dir}/")
+            await _write_static_geoparquet_duckdb(
+                conn,
+                static_cols,
+                static_dir,
+                partition_by=c_files.static.partition_by if c_files.static else None,
+                entity_key=entity_key,
+            )
 
         if sub_annual_cols:
             non_geo_keep = [c for c in keep_always if c != "geometry"]
@@ -426,7 +466,9 @@ async def _write_split_parquets(
                 sub_annual_cols,
                 non_geo_keep,
                 f"{output_path}/sub-annual",
-                partition_by,
+                partition_by=c_files.sub_annual.partition_by
+                if c_files.sub_annual
+                else None,
                 entity_key=entity_key,
             )
         else:
@@ -441,7 +483,7 @@ async def _write_split_parquets(
                 annual_cols,
                 non_geo_keep,
                 f"{output_path}/annual",
-                partition_by,
+                partition_by=c_files.annual.partition_by if c_files.annual else None,
                 entity_key=entity_key,
             )
         else:
@@ -455,7 +497,7 @@ async def _write_static_geoparquet_duckdb(
     conn,
     static_cols: list[str],
     dir_path: str,
-    partition_by: str | None = None,
+    partition_by: list[str] | None = None,
     entity_key: str = "",
 ) -> None:
     """Write the static columns as GeoParquet file(s) via DuckDB.
@@ -478,10 +520,11 @@ async def _write_static_geoparquet_duckdb(
     4. The temporary directory is deleted.
 
     Args:
-        conn: An open DuckDB connection with a 'merged' table registered.
-        static_cols (list[str]): List of column names to include in the static output.
-        dir_path (str): Destination directory path (S3 ``s3://`` or local).
-        partition_by (str | None): Optional Hive partition column.
+        conn: Active DuckDB connection.
+        static_cols (list[str]): List of column names belonging to the static layer.
+        dir_path (str): Output directory (or S3 prefix) to write Parquet chunks.
+        partition_by (list[str] | None): Optional list of Hive partition columns.
+        entity_key (str): Entity key for bloom filter creation.
     """
     import shutil
     import tempfile
@@ -513,6 +556,10 @@ async def _write_static_geoparquet_duckdb(
     # Without PARTITION_BY, DuckDB writes a single file — give it an explicit filename.
     copy_target = write_target if partition_by else str(tmp_local / "part-0.parquet")
 
+    partition_str = ", ".join(partition_by) if partition_by else ""
+    partition_by_clause = f"PARTITION_BY ({partition_str})" if partition_str else ""
+    order_clause = f"ORDER BY {partition_str}" if partition_str else ""
+
     sql = f"""
         COPY (
             SELECT
@@ -525,7 +572,7 @@ async def _write_static_geoparquet_duckdb(
                     ymax := ST_YMax(ST_GeomFromWKB(geometry))
                 ) AS bbox
             FROM merged
-            {(f"ORDER BY {partition_by}") if partition_by else ""}
+            {order_clause}
         )
         TO '{copy_target}'
         WITH (
@@ -533,7 +580,7 @@ async def _write_static_geoparquet_duckdb(
             ROW_GROUP_SIZE {settings.static_parquet_row_group_size},
             COMPRESSION 'ZSTD',
             COMPRESSION_LEVEL {settings.parquet_compression_level}
-            {(", OVERWRITE_OR_IGNORE true, PARTITION_BY (" + partition_by + ")") if partition_by else ""}
+            {(", OVERWRITE_OR_IGNORE true, " + partition_by_clause) if partition_by_clause else ""}
         );
     """
     logger.debug(f"Static COPY SQL:\n{sql}")
@@ -808,11 +855,11 @@ def _upload_dir_to_s3(local_dir: Path, s3_prefix: str) -> int:
 
 def _write_temporal_parquet_polars(
     merged_path: str,
-    kind: str,
+    kind: Literal["annual", "sub-annual"],
     temporal_cols: list[str],
-    keep_cols: list[str],
+    keep_always: list[str],
     base_path: str,
-    partition_by: str | None = None,
+    partition_by: list[str] | None = None,
     entity_key: str = "",
 ) -> None:
     """Write melted temporal (sub-annual or annual) output using Polars.
@@ -822,13 +869,18 @@ def _write_temporal_parquet_polars(
     plan that would OOM on large datasets. The per-slice files are then scanned
     and re-sunk with Hive partitioning in a single streaming pass.
 
+    .. warning::
+        This process will drop any rows where all temporal variables in a
+        time-slice are NULL.
+
     Args:
         merged_path (str): Path to the local merged Parquet file.
         kind (str): Either ``'sub-annual'`` or ``'annual'``.
         temporal_cols (list[str]): The list of wide temporal column names to melt.
-        keep_cols (list[str]): Identity columns to carry forward in each output row.
-        base_path (str): Root output directory (S3 or local).
-        partition_by (str | None): Optional outer Hive partition column.
+        keep_always (list[str]): List of static columns to repeat in each temporal record.
+        base_path (str): Output directory.
+        partition_by (list[str] | None): Optional list of outer Hive partition columns.
+        entity_key (str): Entity key for bloom filter creation.
     """
     if kind == "sub-annual":
         groups = _group_sub_annual_cols(temporal_cols)
@@ -867,22 +919,14 @@ def _write_temporal_parquet_polars(
         var_dtypes[var] = resolved
 
     # Enforce strict column ordering
-    all_final_cols = keep_cols.copy()
+    all_final_cols = keep_always.copy()
     if kind == "sub-annual":
         all_final_cols.extend(["date", "year"])
     else:
         all_final_cols.append("year")
     all_final_cols.extend(all_vars_ordered)
 
-    partition_cols = []
-    if partition_by:
-        partition_cols.append(partition_by)
-    if kind == "sub-annual":
-        partition_cols.append("year")
-
-    if not partition_cols and not base_path.endswith(".parquet"):
-        base_path = f"{base_path}.parquet"
-
+    partition_cols = list(partition_by) if partition_by else []
     import shutil
     import tempfile
 
@@ -907,7 +951,7 @@ def _write_temporal_parquet_polars(
     slice_paths: list[str] = []
     try:
         for time_val, var_map in groups.items():
-            exprs = [pl.col(c) for c in keep_cols]
+            exprs = [pl.col(c) for c in keep_always]
             if kind == "sub-annual":
                 exprs.append(
                     pl.lit(time_val).str.strptime(pl.Date, "%Y-%m-%d").alias("date")
@@ -1207,7 +1251,10 @@ async def run_standardise(request: StandardiseRequest) -> None:
         schema = pl.scan_parquet(request.static_input).collect_schema().names()
         has_bbox = "bbox" in schema
 
-        partition_str = ", ".join(request.partition_by) if request.partition_by else ""
+        c_files = request.converted_files
+        static_pb = c_files.static.partition_by if c_files and c_files.static else None
+
+        partition_str = ", ".join(static_pb) if static_pb else ""
         partition_by_clause = f"PARTITION_BY ({partition_str})" if partition_str else ""
 
         if partition_str:
@@ -1242,16 +1289,14 @@ async def run_standardise(request: StandardiseRequest) -> None:
         write_target = str(tmp_local)
 
         if not is_s3:
-            if request.partition_by:
+            if static_pb:
                 Path(static_out_dir).mkdir(parents=True, exist_ok=True)
             else:
                 if not static_out_dir.endswith(".parquet"):
                     static_out_dir += ".parquet"
                 Path(static_out_dir).parent.mkdir(parents=True, exist_ok=True)
 
-        copy_target = (
-            write_target if request.partition_by else str(tmp_local / "part-0.parquet")
-        )
+        copy_target = write_target if static_pb else str(tmp_local / "part-0.parquet")
 
         sql = f"""
             COPY (
@@ -1280,7 +1325,7 @@ async def run_standardise(request: StandardiseRequest) -> None:
 
         # Move / Upload
         if is_s3:
-            if request.partition_by:
+            if static_pb:
                 _upload_dir_to_s3(tmp_local, static_out_dir)
             else:
                 import s3fs
@@ -1288,7 +1333,7 @@ async def run_standardise(request: StandardiseRequest) -> None:
                 fs = s3fs.S3FileSystem()
                 fs.put(str(tmp_local / "part-0.parquet"), static_out_dir)
         else:
-            if request.partition_by:
+            if static_pb:
                 for local_file in written:
                     rel = local_file.relative_to(tmp_local)
                     dest = Path(static_out_dir) / rel
@@ -1310,6 +1355,19 @@ async def run_standardise(request: StandardiseRequest) -> None:
                 if not temp_input:
                     continue
 
+                if temp_name == "annual":
+                    temp_pb = (
+                        c_files.annual.partition_by
+                        if c_files and c_files.annual
+                        else None
+                    )
+                else:
+                    temp_pb = (
+                        c_files.sub_annual.partition_by
+                        if c_files and c_files.sub_annual
+                        else None
+                    )
+
                 logger.info(
                     f"Standardising {temp_name} Parquet -> {request.output_path}/{temp_name}"
                 )
@@ -1320,8 +1378,8 @@ async def run_standardise(request: StandardiseRequest) -> None:
 
                 # Sort by partition columns + year + h_index
                 sort_cols = []
-                if request.partition_by:
-                    sort_cols.extend(request.partition_by)
+                if temp_pb:
+                    sort_cols.extend(temp_pb)
 
                 schema_names = df.collect_schema().names()
                 if "year" in schema_names:
@@ -1332,9 +1390,7 @@ async def run_standardise(request: StandardiseRequest) -> None:
                 df = df.drop("h_index")
 
                 out_path = f"{request.output_path}/{temp_name}"
-                part_cols = list(request.partition_by) if request.partition_by else []
-                if "year" in schema_names:
-                    part_cols.append("year")
+                part_cols = list(temp_pb) if temp_pb else []
 
                 if part_cols:
                     target_path = pl.PartitionBy(out_path, key=part_cols)

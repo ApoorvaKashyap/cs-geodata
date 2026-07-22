@@ -47,6 +47,18 @@ class LayerDescriptor(BaseModel):
     )
 
 
+class ParquetFileConfig(BaseModel):
+    partition_by: list[str] | None = Field(
+        default=None, description="Ordered list of Hive partition columns."
+    )
+
+
+class ConvertedFilesConfig(BaseModel):
+    static: ParquetFileConfig | None = Field(default_factory=ParquetFileConfig)
+    annual: ParquetFileConfig | None = Field(default_factory=ParquetFileConfig)
+    sub_annual: ParquetFileConfig | None = Field(default_factory=ParquetFileConfig)
+
+
 class LayerConversionRequest(BaseModel):
     """Parsed representation of a TOML descriptor file.
 
@@ -91,12 +103,9 @@ class LayerConversionRequest(BaseModel):
             "base entity row via a centroid-in-polygon spatial join. Optional."
         ),
     )
-    partition_by: str | None = Field(
-        default=None,
-        description=(
-            "Output partition column name. Usually the same as super_field. "
-            "All output Parquet files are partitioned on this column. Optional."
-        ),
+    converted_files: ConvertedFilesConfig | None = Field(
+        default_factory=ConvertedFilesConfig,
+        description="Partition configurations for the static, annual, and sub_annual Parquet files.",
     )
     add_admin: bool = Field(
         default=False,
@@ -229,6 +238,7 @@ class StandardiseRequest(BaseModel):
     key: str | None = Field(
         default=None, description="Entity primary key for Bloom filters."
     )
-    partition_by: list[str] | None = Field(
-        default=None, description="Ordered list of Hive partition columns."
+    converted_files: ConvertedFilesConfig | None = Field(
+        default_factory=ConvertedFilesConfig,
+        description="Partition configurations for the static, annual, and sub_annual Parquet files.",
     )
