@@ -10,6 +10,7 @@ def _make_queues() -> tuple[Queue, Queue, Queue]:
 
     Raises:
         RedisConnectionError: If the Redis server is unreachable.
+
     """
     try:
         client = get_redis_client()

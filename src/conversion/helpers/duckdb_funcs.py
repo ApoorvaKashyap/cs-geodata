@@ -19,6 +19,7 @@ def init_duckdb() -> DuckDBPyConnection:
 
     Raises:
         RuntimeError: If DuckDB initialization fails.
+
     """
     extensions = ["httpfs", "spatial", "aws"]
     try:

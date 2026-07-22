@@ -34,6 +34,7 @@ def clean_label(label: str) -> str:
         "Raipur District"  -> "raipur_district"
         "North-East Delhi" -> "north_east_delhi"
         "  Pune  "         -> "pune"
+
     """
     return re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")
 
@@ -47,6 +48,7 @@ def clean_tehsils(response: pl.DataFrame) -> pl.LazyFrame:
     Returns:
         A LazyFrame exploded to the tehsil level with state_name, district_name,
         and tehsil_name.
+
     """
     df_districts = response.explode("district").with_columns(
         [
@@ -78,6 +80,11 @@ def expand_rename_globs(cols: list[str], rename_dict: dict[str, str]) -> dict[st
     E.g., {"k_*": "kharif_*"} applied to ["k_2018", "k_2019"]
     returns {"k_2018": "kharif_2018", "k_2019": "kharif_2019"}.
     Non-glob exact matches are kept as is, but are matched case-insensitively.
+
+    Args:
+        cols: List of column names to check.
+        rename_dict: Dictionary mapping glob patterns or names to target names.
+
     """
     expanded = {}
     col_lower_map = {c.lower(): c for c in cols}
@@ -109,6 +116,11 @@ def expand_drop_globs(cols: list[str], drop_list: list[str]) -> list[str]:
     """Expand a list of column names with optional glob patterns.
 
     E.g. ["prefix_*", "exact_name"] -> ["prefix_1", "prefix_2", "exact_name"].
+
+    Args:
+        cols: List of column names to check.
+        drop_list: List of glob patterns or column names to drop.
+
     """
     import fnmatch
 
@@ -142,6 +154,7 @@ def rename_and_drop(
 
     Returns:
         The processed LazyFrame with lowercased column names.
+
     """
     cols = layer.collect_schema().names()
     expanded_rename = expand_rename_globs(cols, rename)
@@ -158,6 +171,11 @@ def apply_scaling(layer: pl.LazyFrame, scale_dict: dict[str, float]) -> pl.LazyF
     """Multiply matching columns by the specified factor.
 
     Supports glob patterns in scale_dict keys.
+
+    Args:
+        layer: The layer LazyFrame.
+        scale_dict: Dictionary mapping column names (or globs) to a multiplication factor.
+
     """
     if not scale_dict:
         return layer
@@ -202,6 +220,7 @@ def get_layer_prefix(layer: str) -> str:
 
     Returns:
         A 2-3 character string prefix.
+
     """
     if "_" in layer:
         parts = layer.split("_")
@@ -225,6 +244,7 @@ def prefix_cols(
 
     Returns:
         The LazyFrame with specific columns prefixed.
+
     """
     common_cols = [c.lower() for c in common_cols]
     layer_cols = [c.lower() for c in layer.collect_schema().names()]
@@ -250,6 +270,7 @@ def merge_col_metadata(version: pl.LazyFrame, tehsils: pl.LazyFrame) -> pl.LazyF
 
     Returns:
         A merged LazyFrame combining version metadata with tehsil identities.
+
     """
     version = version.rename(lambda c: c.lower())
     tehsils = tehsils.rename(lambda c: c.lower())
@@ -274,6 +295,7 @@ def split_cols(layer: pl.LazyFrame) -> pl.LazyFrame:
 
     Returns:
         The LazyFrame with range columns split into min/max bounds.
+
     """
     # Optional word prefix like "upto ", "up to "
     WORD_PREFIX = r"(?:[A-Za-z]+\s*)+"
@@ -357,6 +379,7 @@ def unnest_json_cols(layer: pl.LazyFrame) -> pl.LazyFrame:
 
     Returns:
         The LazyFrame with unnested JSON attributes as separate columns.
+
     """
     schema = layer.collect_schema()
     # The prefix group *must* start with a letter so that a raw year token like
@@ -444,6 +467,7 @@ def classify_columns(
         A 3-tuple ``(static_cols, sub_annual_cols, annual_cols)`` where every
         column in *cols* appears in exactly one bucket, or is silently dropped
         (net columns).
+
     """
     keep_set = set(keep_always)
     static: list[str] = list(keep_always)  # preserve order of common cols first

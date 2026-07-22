@@ -63,7 +63,12 @@ _DTYPE_RANK: dict[type, int] = {
 
 
 def _dtype_sort_key(dt: pl.DataType) -> int:
-    """Return a numeric rank for *dt* so that ``max()`` picks the widest type."""
+    """Return a numeric rank for *dt* so that ``max()`` picks the widest type.
+
+    Args:
+        dt: Polars DataType.
+
+    """
     return _DTYPE_RANK.get(type(dt), 6)  # default to Float64 rank
 
 
@@ -94,6 +99,7 @@ def _select_bloom_filter_cols(
     Returns:
         ``dict[column_name, True]`` ready to pass as ``bloom_filter_options``
         to :class:`pyarrow.parquet.ParquetWriter`.
+
     """
     schema = pf.schema_arrow
     if pf.metadata.num_rows == 0 or pf.metadata.num_row_groups == 0:
@@ -156,6 +162,7 @@ async def run_pipeline(request: LayerConversionRequest) -> None:
     Args:
         request (LayerConversionRequest): Configuration for the pipeline run, including layers, paths,
             version bounds, and column mappings.
+
     """
     import tempfile
 
@@ -419,6 +426,7 @@ async def _write_split_parquets(
         all_final_cols (list[str]): List of all column names in the merged frame.
         entity_key (str): Entity primary-key column name.
         converted_files (ConvertedFilesConfig | None): Configuration for output partitions.
+
     """
     keep_always = [c for c in COMMON_COLS if c in all_final_cols]
     if entity_key and entity_key not in keep_always and entity_key in all_final_cols:
@@ -541,6 +549,7 @@ async def _write_static_geoparquet_duckdb(
         partition_by (list[str] | None): Optional list of Hive partition columns.
         row_group_size (int): Target row group size for the output Parquet files.
         entity_key (str): Entity key for bloom filter creation.
+
     """
     import shutil
     import tempfile
@@ -665,6 +674,7 @@ def _patch_geoparquet_metadata(parquet_file: Path, entity_key: str = "") -> None
         parquet_file (Path): Path to the ``.parquet`` file to patch.
         entity_key (str): Entity primary-key column name, forwarded to
             :func:`_select_bloom_filter_cols`.
+
     """
     tmp_path = parquet_file.with_suffix(".patching.parquet")
     try:
@@ -752,6 +762,7 @@ def _apply_bloom_filters_to_dir(dir_path: str, entity_key: str) -> None:
             Hive-partition subdirectories).
         entity_key: Entity primary-key column name, forwarded to
             :func:`_select_bloom_filter_cols`.
+
     """
     root = Path(dir_path)
     if root.is_file():
@@ -823,6 +834,7 @@ def _normalize_parquet_filenames(dir_path: str) -> None:
     Args:
         dir_path: Root of the directory tree whose filenames should be
             normalised (may contain Hive-partition subdirectories).
+
     """
     root = Path(dir_path)
     if root.is_file():
@@ -856,6 +868,7 @@ def _upload_dir_to_s3(local_dir: Path, s3_prefix: str) -> int:
 
     Returns:
         int: Number of files uploaded.
+
     """
     import s3fs
 
@@ -899,6 +912,7 @@ def _write_temporal_parquet_polars(
         partition_by (list[str] | None): Optional list of outer Hive partition columns.
         row_group_size (int): Target row group size for the output Parquet files.
         entity_key (str): Entity key for bloom filter creation.
+
     """
     if kind == "sub-annual":
         groups = _group_sub_annual_cols(temporal_cols)
@@ -1051,6 +1065,7 @@ def _group_sub_annual_cols(cols: list[str]) -> dict[str, dict[str, str]]:
 
     Returns:
         dict[str, dict[str, str]]: ``{date_str -> {var_name -> orig_col_name}}``
+
     """
     from dateutil.parser import parse
 
@@ -1083,6 +1098,7 @@ def _group_annual_cols(cols: list[str]) -> dict[str, dict[str, str]]:
 
     Returns:
         dict[str, dict[str, str]]: ``{year_suffix -> {var_name -> orig_col_name}}``
+
     """
     groups: dict[str, dict[str, str]] = {}
     for col in cols:
@@ -1125,6 +1141,7 @@ async def _process_layer(
     Raises:
         ValueError: If no Parquet files were produced for a layer (e.g. all
             worker tasks failed).
+
     """
     results: dict[str, pl.LazyFrame] = {}
 
@@ -1160,6 +1177,7 @@ async def _fetch_version(s3_path: str) -> pl.LazyFrame:
 
     Returns:
         pl.LazyFrame: A lazy dataframe containing the version metadata sorted by state.
+
     """
     df = pl.read_csv(s3_path)
     return (
@@ -1198,6 +1216,7 @@ async def _fetch_base(
 
     Raises:
         ValueError: If base layer conversion fails.
+
     """
     try:
         base = pl.scan_parquet(base_layer)
@@ -1223,11 +1242,15 @@ async def _fetch_base(
 async def run_standardise(request: StandardiseRequest) -> None:
     """Standardise pre-existing parquets directly without download/join steps.
 
+    Args:
+        request: The StandardiseRequest payload.
+
     Applies cs-geodata schema conventions:
     - GeoParquet v1.1.0 metadata + bbox
     - Bloom filters on string ID columns
     - Hive partitioning
     - Hilbert sorting via a static geometry index mapping
+
     """
     import tempfile
     import os

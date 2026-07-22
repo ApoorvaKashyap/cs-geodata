@@ -15,6 +15,7 @@ def _gpu_available() -> bool:
 
     Returns:
         bool: True if GPU is available.
+
     """
     global _GPU_AVAILABLE
     if _GPU_AVAILABLE is None:
@@ -54,6 +55,7 @@ def collect_lf(lf: pl.LazyFrame) -> pl.DataFrame:
 
     Returns:
         pl.DataFrame: A materialised ``pl.DataFrame``.
+
     """
     global _GPU_AVAILABLE
     if _gpu_available():
@@ -102,6 +104,7 @@ def scan_with_key_filter(
 
     Returns:
         pl.LazyFrame: A ``pl.LazyFrame`` ready to be ``.collect()``-ed.
+
     """
     lf = pl.scan_parquet(path, hive_partitioning=True)
 

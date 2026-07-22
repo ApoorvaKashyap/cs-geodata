@@ -27,6 +27,7 @@ def get_redis_client() -> Redis:
     Raises:
         redis.exceptions.ConnectionError: If the Redis server cannot be
             reached on the first ping.
+
     """
     global _client
     if _client is None:

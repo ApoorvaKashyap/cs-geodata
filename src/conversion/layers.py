@@ -29,6 +29,7 @@ def layer_conversion(request: ConversionRequest) -> None:
     Args:
         request: Lightweight API payload containing the descriptor URL and
             output path.
+
     """
     logger.info(f"Loading descriptor from {request.descriptor_url}")
     full_request = load_descriptor(request.descriptor_url, request.output_path)
@@ -56,7 +57,12 @@ def handle_standardise(request: StandardiseRequest) -> dict:
 
 
 def standardise_conversion(request: StandardiseRequest) -> None:
-    """RQ worker entry point for standardise requests."""
+    """RQ worker entry point for standardise requests.
+
+    Args:
+        request: The StandardiseRequest payload.
+
+    """
     logger.info(f"Starting standardise conversion to {request.output_path}")
     try:
         import asyncio

@@ -28,6 +28,7 @@ def merge_all_layers(
 
     Raises:
         ValueError: If the base layer is missing expected columns.
+
     """
     # Validate base has expected columns
     base_schema = base.collect_schema().names()
@@ -120,6 +121,7 @@ def _extract_location_meta(
 
     Raises:
         ValueError: If no single layer contains all necessary location columns.
+
     """
     if not layer_results:
         logger.info(
@@ -195,6 +197,7 @@ def _get_missing_entity_ids(
 
     Returns:
         pl.LazyFrame: A LazyFrame containing the missing entity IDs.
+
     """
     if not layer_results:
         logger.info("No attribute layers — returning empty missing-ID frame.")

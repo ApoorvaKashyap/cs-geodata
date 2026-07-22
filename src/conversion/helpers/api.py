@@ -23,6 +23,7 @@ async def get_active() -> pl.DataFrame:
 
     Returns:
         pl.DataFrame: A polars DataFrame containing the active locations JSON response.
+
     """
     response = requests.get(
         f"{settings.corestack_api_url}/get_active_locations/",
@@ -66,9 +67,11 @@ def download_and_convert_geojson(
         url_template (str): WFS URL template with {district} and {tehsil} placeholders.
         cols_rename (dict[str, str]): Column rename mapping to apply after reading the file.
         cols_drop (list[str]): Column names to drop after reading the file.
+        scale (dict[str, float]): Scaling factor mapping to apply after reading the file.
 
     Returns:
         int: 0 on success, -1 on failure.
+
     """
     url = url_template.format(district=district, tehsil=tehsil)
     logger.info(
@@ -154,6 +157,7 @@ async def convert_base(
 
     Returns:
         bool: True if conversion succeeded, False otherwise.
+
     """
     if input_path == output_path:
         logger.error(
@@ -179,7 +183,7 @@ def _convert_base_sync(
     super_layer_source: str | None = None,
     super_field: str | None = None,
 ) -> bool:
-    """Synchronously convert and Hilbert-sort a base layer using DuckDB.
+    """Convert synchronously and Hilbert-sort a base layer using DuckDB.
 
     When *super_layer_source* and *super_field* are both provided the
     conversion runs in **two steps**:
@@ -205,6 +209,7 @@ def _convert_base_sync(
 
     Returns:
         bool: True if conversion succeeded, False otherwise.
+
     """
     import tempfile
 

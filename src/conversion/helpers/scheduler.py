@@ -23,6 +23,7 @@ async def _create_tehsil_map(
 
     Returns:
         A dictionary mapping task keys to rq Job objects.
+
     """
     tmap: dict[str, Job] = {}
 
@@ -65,6 +66,7 @@ async def get_all_geojsons(
 
     Returns:
         A dictionary mapping layer names to their corresponding tehsil task maps.
+
     """
     tehsils_t = tehsils.collect(engine="streaming")
     all_geojsons: dict = {}
@@ -85,6 +87,7 @@ async def _get_task_completion(layer: dict[str, Job]) -> tuple[int, int, int, in
 
     Returns:
         A tuple of (completed, failed, in_progress, pending) counts.
+
     """
     completed = 0
     failed = 0
@@ -114,6 +117,7 @@ async def poll_completion(layers: dict[str, dict[str, Job]]) -> bool:
     Returns:
         True if all tasks have finished or failed, False if any are still
         pending or in progress.
+
     """
     for layer in layers:
         c, f, i, p = await _get_task_completion(layers[layer])

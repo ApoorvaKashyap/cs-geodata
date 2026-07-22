@@ -222,6 +222,7 @@ def load_descriptor(descriptor_url: str, output_path: str) -> LayerConversionReq
 
     Raises:
         ValueError: If the descriptor cannot be fetched or parsed.
+
     """
     try:
         with fsspec.open(descriptor_url, "rb") as fh:

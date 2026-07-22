@@ -49,6 +49,7 @@ def fill_missing_admin_boundaries(
         A LazyFrame where ``state``, ``district``, and ``tehsil`` are typed as
         ``List[String]``.  Entities with no intersecting tehsil carry empty
         lists for those fields.
+
     """
     logger.info("Loading tehsil boundaries")
 
