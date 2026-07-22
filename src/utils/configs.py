@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     # Raw Admin Bounds Files
     tehsil_bounds: str = ""
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
     # DuckDB
     duckdb_memory_limit: str = "12GB"
