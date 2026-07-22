@@ -46,6 +46,7 @@ def download_and_convert_geojson(
     cols_rename: dict[str, str],
     cols_drop: list[str],
     scale: dict[str, float],
+    row_group_size: int = 22000,
 ) -> int:
     """Download a GeoJSON from GeoServer, clean it, and persist as Parquet.
 
@@ -68,6 +69,7 @@ def download_and_convert_geojson(
         cols_rename (dict[str, str]): Column rename mapping to apply after reading the file.
         cols_drop (list[str]): Column names to drop after reading the file.
         scale (dict[str, float]): Scaling factor mapping to apply after reading the file.
+        row_group_size (int): Row group size for output Parquet file.
 
     Returns:
         int: 0 on success, -1 on failure.
@@ -122,7 +124,7 @@ def download_and_convert_geojson(
             parquet_path,
             compression="zstd",
             compression_level=settings.parquet_compression_level,
-            row_group_size=settings.parquet_row_group_size,
+            row_group_size=row_group_size,
         )
         logger.info(f"Written {parquet_path} ({df.height} rows)")
         return 0
@@ -141,6 +143,7 @@ async def convert_base(
     chunk_size: int = 500000,
     super_layer_source: str | None = None,
     super_field: str | None = None,
+    row_group_size: int = 22000,
 ) -> bool:
     """Asynchronously convert a base layer to Parquet format, sorted by Hilbert curve.
 
@@ -154,6 +157,7 @@ async def convert_base(
         chunk_size (int): Unused; kept for API compatibility.
         super_layer_source (str | None): Optional path/URI to the super-layer boundary file.
         super_field (str | None): Column name in the super-layer file to copy onto each row.
+        row_group_size (int): Target row group size for the output Parquet file.
 
     Returns:
         bool: True if conversion succeeded, False otherwise.
@@ -174,6 +178,7 @@ async def convert_base(
             output_path,
             super_layer_source,
             super_field,
+            row_group_size,
         )
 
 
@@ -182,6 +187,7 @@ def _convert_base_sync(
     output_path: str,
     super_layer_source: str | None = None,
     super_field: str | None = None,
+    row_group_size: int = 22000,
 ) -> bool:
     """Convert synchronously and Hilbert-sort a base layer using DuckDB.
 
@@ -206,6 +212,7 @@ def _convert_base_sync(
         output_path (str): Destination path for the output Parquet file.
         super_layer_source (str | None): Optional path/URI to the super-layer boundary file.
         super_field (str | None): Column name in the super-layer whose value is copied to each row.
+        row_group_size (int): Target row group size for the output Parquet file.
 
     Returns:
         bool: True if conversion succeeded, False otherwise.
@@ -236,7 +243,7 @@ def _convert_base_sync(
                     ORDER BY ST_Hilbert(geom)
                 )
                 TO '{tmp_path}'
-                WITH (FORMAT 'PARQUET', COMPRESSION 'ZSTD', COMPRESSION_LEVEL {settings.parquet_compression_level}, ROW_GROUP_SIZE {settings.parquet_row_group_size});
+                WITH (FORMAT 'PARQUET', COMPRESSION 'ZSTD', COMPRESSION_LEVEL {settings.parquet_compression_level}, ROW_GROUP_SIZE {row_group_size});
             """
             conn.execute(sql_step1)
 
@@ -270,7 +277,7 @@ def _convert_base_sync(
                     ORDER BY b._rn
                 )
                 TO '{output_path}'
-                WITH (FORMAT 'PARQUET', COMPRESSION 'ZSTD', COMPRESSION_LEVEL {settings.parquet_compression_level}, ROW_GROUP_SIZE {settings.parquet_row_group_size});
+                WITH (FORMAT 'PARQUET', COMPRESSION 'ZSTD', COMPRESSION_LEVEL {settings.parquet_compression_level}, ROW_GROUP_SIZE {row_group_size});
             """
             conn.execute(sql_join)
         else:
@@ -284,7 +291,7 @@ def _convert_base_sync(
                     ORDER BY ST_Hilbert(geom)
                 )
                 TO '{output_path}'
-                WITH (FORMAT 'PARQUET', COMPRESSION 'ZSTD', COMPRESSION_LEVEL {settings.parquet_compression_level}, ROW_GROUP_SIZE {settings.parquet_row_group_size});
+                WITH (FORMAT 'PARQUET', COMPRESSION 'ZSTD', COMPRESSION_LEVEL {settings.parquet_compression_level}, ROW_GROUP_SIZE {row_group_size});
             """
             conn.execute(sql_single)
 
