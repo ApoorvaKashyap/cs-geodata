@@ -9,7 +9,7 @@ import polars as pl
 import polars_st as st
 from loguru import logger
 
-from src.app.models import LayerConversionRequest
+from src.app.models import LayerConversionRequest, StandardiseRequest
 from src.conversion.helpers.api import convert_base
 from src.conversion.helpers.cleaners import (
     classify_columns,
@@ -1158,6 +1158,231 @@ async def _fetch_base(
     return pl.scan_parquet(converted_path)
 
 
+async def run_standardise(request: StandardiseRequest) -> None:
+    """Standardise pre-existing parquets directly without download/join steps.
+
+    Applies cs-geodata schema conventions:
+    - GeoParquet v1.1.0 metadata + bbox
+    - Bloom filters on string ID columns
+    - Hive partitioning
+    - Hilbert sorting via a static geometry index mapping
+    """
+    import tempfile
+    import os
+    import shutil
+    from datetime import datetime, timezone
+
+    if not request.output_path.startswith("s3://"):
+        os.makedirs(request.output_path, exist_ok=True)
+
+    tmpdir = tempfile.mkdtemp(prefix="standardise_")
+    logger.info(f"Using temp directory for standardise: {tmpdir}")
+
+    conn = init_duckdb()
+    try:
+        # 1. Static Processing
+        logger.info(f"Standardising static GeoParquet -> {request.output_path}/static")
+        conn.execute(
+            f"CREATE VIEW merged AS SELECT * FROM read_parquet('{request.static_input}')"
+        )
+
+        # Export h_index for temporal sorting
+        h_index_path = f"{tmpdir}/h_index.parquet"
+        if request.annual_input or request.sub_annual_input:
+            if not request.key:
+                raise ValueError(
+                    "Must provide 'key' in StandardiseRequest to sort temporal files against static geometry"
+                )
+
+            logger.info("Exporting h_index mapping for temporal sorting")
+            conn.execute(f"""
+                COPY (
+                    SELECT
+                        "{request.key}",
+                        row_number() OVER (ORDER BY ST_Hilbert(ST_GeomFromWKB(geometry))) as h_index
+                    FROM merged
+                ) TO '{h_index_path}' (FORMAT 'PARQUET', COMPRESSION 'ZSTD')
+            """)
+
+        schema = pl.scan_parquet(request.static_input).collect_schema().names()
+        has_bbox = "bbox" in schema
+
+        partition_str = ", ".join(request.partition_by) if request.partition_by else ""
+        partition_by_clause = f"PARTITION_BY ({partition_str})" if partition_str else ""
+
+        if partition_str:
+            order_clause = (
+                f"ORDER BY {partition_str}, ST_Hilbert(ST_GeomFromWKB(geometry))"
+            )
+        else:
+            order_clause = "ORDER BY ST_Hilbert(ST_GeomFromWKB(geometry))"
+
+        col_select = ", ".join(
+            f'"{c}"' for c in schema if c != "geometry" and c != "bbox"
+        )
+        if not col_select:
+            col_select = "*"
+
+        if has_bbox:
+            bbox_sql = "bbox"
+        else:
+            bbox_sql = """
+                struct_pack(
+                    xmin := ST_XMin(ST_GeomFromWKB(geometry)),
+                    ymin := ST_YMin(ST_GeomFromWKB(geometry)),
+                    xmax := ST_XMax(ST_GeomFromWKB(geometry)),
+                    ymax := ST_YMax(ST_GeomFromWKB(geometry))
+                ) AS bbox
+            """
+
+        static_out_dir = f"{request.output_path}/static"
+        is_s3 = static_out_dir.startswith("s3://")
+
+        tmp_local = Path(tempfile.mkdtemp(prefix="standardise_static_"))
+        write_target = str(tmp_local)
+
+        if not is_s3:
+            if request.partition_by:
+                Path(static_out_dir).mkdir(parents=True, exist_ok=True)
+            else:
+                if not static_out_dir.endswith(".parquet"):
+                    static_out_dir += ".parquet"
+                Path(static_out_dir).parent.mkdir(parents=True, exist_ok=True)
+
+        copy_target = (
+            write_target if request.partition_by else str(tmp_local / "part-0.parquet")
+        )
+
+        sql = f"""
+            COPY (
+                SELECT
+                    {col_select},
+                    ST_SetCRS(ST_GeomFromWKB(geometry), 'EPSG:4326') AS geometry,
+                    {bbox_sql}
+                FROM merged
+                {order_clause}
+            )
+            TO '{copy_target}'
+            WITH (
+                FORMAT 'PARQUET',
+                ROW_GROUP_SIZE {settings.static_parquet_row_group_size},
+                COMPRESSION 'ZSTD',
+                COMPRESSION_LEVEL {settings.parquet_compression_level}
+                {(", OVERWRITE_OR_IGNORE true, " + partition_by_clause) if partition_by_clause else ""}
+            );
+        """
+        conn.execute(sql)
+
+        # Patch geoparquet & bloom filters
+        written = sorted(tmp_local.rglob("*.parquet"))
+        for parquet_file in written:
+            _patch_geoparquet_metadata(parquet_file, entity_key=request.key or "")
+
+        # Move / Upload
+        if is_s3:
+            if request.partition_by:
+                _upload_dir_to_s3(tmp_local, static_out_dir)
+            else:
+                import s3fs
+
+                fs = s3fs.S3FileSystem()
+                fs.put(str(tmp_local / "part-0.parquet"), static_out_dir)
+        else:
+            if request.partition_by:
+                for local_file in written:
+                    rel = local_file.relative_to(tmp_local)
+                    dest = Path(static_out_dir) / rel
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(str(local_file), str(dest))
+            else:
+                shutil.copy2(str(tmp_local / "part-0.parquet"), str(static_out_dir))
+
+        shutil.rmtree(tmp_local, ignore_errors=True)
+
+        # 2. Temporal Processing
+        if request.annual_input or request.sub_annual_input:
+            h_idx_df = pl.scan_parquet(h_index_path)
+
+            for temp_input, temp_name in [
+                (request.annual_input, "annual"),
+                (request.sub_annual_input, "sub-annual"),
+            ]:
+                if not temp_input:
+                    continue
+
+                logger.info(
+                    f"Standardising {temp_name} Parquet -> {request.output_path}/{temp_name}"
+                )
+                df = pl.scan_parquet(temp_input)
+
+                # Join with h_index
+                df = df.join(h_idx_df, on=request.key, how="left")
+
+                # Sort by partition columns + year + h_index
+                sort_cols = []
+                if request.partition_by:
+                    sort_cols.extend(request.partition_by)
+
+                schema_names = df.collect_schema().names()
+                if "year" in schema_names:
+                    sort_cols.append("year")
+                sort_cols.append("h_index")
+
+                df = df.sort(sort_cols)
+                df = df.drop("h_index")
+
+                out_path = f"{request.output_path}/{temp_name}"
+                part_cols = list(request.partition_by) if request.partition_by else []
+                if "year" in schema_names:
+                    part_cols.append("year")
+
+                if part_cols:
+                    target_path = pl.PartitionBy(out_path, key=part_cols)
+                    df.sink_parquet(
+                        target_path,
+                        compression="zstd",
+                        compression_level=settings.parquet_compression_level,
+                        row_group_size=settings.parquet_row_group_size,
+                    )
+                    _apply_bloom_filters_to_dir(out_path, request.key or "")
+                    _normalize_parquet_filenames(out_path)
+                else:
+                    file_out_path = f"{out_path}.parquet"
+                    df.sink_parquet(
+                        file_out_path,
+                        compression="zstd",
+                        compression_level=settings.parquet_compression_level,
+                        row_group_size=settings.parquet_row_group_size,
+                    )
+                    _apply_bloom_filters_to_dir(file_out_path, request.key or "")
+                    _normalize_parquet_filenames(file_out_path)
+
+    finally:
+        conn.close()
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+    # 3. Metadata
+    try:
+        metadata = {
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "timezone": "UTC",
+            "descriptor": request.model_dump(),
+        }
+        metadata_path = f"{request.output_path.rstrip('/')}/metadata.json"
+
+        if metadata_path.startswith("s3://"):
+            import s3fs
+
+            fs = s3fs.S3FileSystem()
+            with fs.open(metadata_path, "w") as f:
+                json.dump(metadata, f, indent=2)
+        else:
+            with open(metadata_path, "w") as f:
+                json.dump(metadata, f, indent=2)
+    except Exception as exc:
+        logger.error(f"Failed to write metadata JSON: {exc}")
+
+
 if __name__ == "__main__":
     import tomllib
 
@@ -1167,5 +1392,5 @@ if __name__ == "__main__":
     # Normalise field name for LayerConversionRequest
     if "active_locations" in request:
         request["layer_version"] = request.pop("active_locations")
-    request = LayerConversionRequest(**request)
-    asyncio.run(run_pipeline(request))
+    req = LayerConversionRequest(**request)
+    asyncio.run(run_pipeline(req))

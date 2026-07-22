@@ -211,3 +211,24 @@ def load_descriptor(descriptor_url: str, output_path: str) -> LayerConversionReq
     raw["output_path"] = output_path
 
     return LayerConversionRequest.model_validate(raw)
+
+
+class StandardiseRequest(BaseModel):
+    """API request payload for standardising existing Parquet files."""
+
+    static_input: str = Field(description="Path to existing static GeoParquet.")
+    annual_input: str | None = Field(
+        default=None, description="Path to existing annual Parquet."
+    )
+    sub_annual_input: str | None = Field(
+        default=None, description="Path to existing sub-annual Parquet."
+    )
+    output_path: str = Field(
+        description="Destination directory for standardized output."
+    )
+    key: str | None = Field(
+        default=None, description="Entity primary key for Bloom filters."
+    )
+    partition_by: list[str] | None = Field(
+        default=None, description="Ordered list of Hive partition columns."
+    )

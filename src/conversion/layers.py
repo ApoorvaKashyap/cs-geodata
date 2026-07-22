@@ -1,7 +1,12 @@
 from loguru import logger
 
-from src.app.models import BaseLayers, ConversionRequest, load_descriptor
-from src.conversion.algos import run_pipeline
+from src.app.models import (
+    BaseLayers,
+    ConversionRequest,
+    StandardiseRequest,
+    load_descriptor,
+)
+from src.conversion.algos import run_pipeline, run_standardise
 from src.conversion.helpers.api import convert_base
 from src.work.work_queue import bq, lq
 
@@ -38,6 +43,28 @@ def layer_conversion(request: ConversionRequest) -> None:
         logger.info(f"Layer conversion complete -> {request.output_path}")
     except Exception as e:
         logger.error(f"Layer conversion failed: {e}")
+        raise
+
+
+def handle_standardise(request: StandardiseRequest) -> dict:
+    logger.info(f"Enqueueing standardise job for output={request.output_path}")
+    tid = lq.enqueue(standardise_conversion, request, job_timeout=86400)
+    return {
+        "task_id": tid.id,
+        "status": tid.get_status().name,
+    }
+
+
+def standardise_conversion(request: StandardiseRequest) -> None:
+    """RQ worker entry point for standardise requests."""
+    logger.info(f"Starting standardise conversion to {request.output_path}")
+    try:
+        import asyncio
+
+        asyncio.run(run_standardise(request))
+        logger.info(f"Standardise conversion complete -> {request.output_path}")
+    except Exception as e:
+        logger.error(f"Standardise conversion failed: {e}")
         raise
 
 

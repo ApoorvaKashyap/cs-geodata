@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from loguru import logger
 
 from src.routers.geojson import router as geojson_router
+from src.routers.geoparquet import router as geoparquet_router
 from src.utils.checks import check_redis_connection, check_worker_status
 from src.work.work_queue import get_status
 
@@ -54,7 +55,7 @@ async def get_jobstatus(task_id: str) -> dict[str, str]:
 
 
 app.include_router(geojson_router, prefix="/api/v1")
-
+app.include_router(geoparquet_router, prefix="/api/v1")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0")
