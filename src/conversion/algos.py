@@ -310,11 +310,12 @@ async def run_pipeline(request: LayerConversionRequest) -> None:
         base_schema = base.collect_schema().names()
         for p_col in partition_cols:
             if p_col not in base_schema:
-                logger.warning(
-                    f"partition_by column '{p_col}' does not exist on the "
-                    "base frame — skipping null-row filter. Ensure a super-layer is "
-                    "configured if you need this column populated."
-                )
+                if p_col not in ("year", "date"):
+                    logger.warning(
+                        f"partition_by column '{p_col}' does not exist on the "
+                        "base frame — skipping null-row filter. Ensure a super-layer is "
+                        "configured if you need this column populated."
+                    )
             else:
                 null_count = (
                     base.filter(pl.col(p_col).is_null())
@@ -477,6 +478,15 @@ async def _write_split_parquets(
 
         if sub_annual_cols:
             non_geo_keep = [c for c in keep_always if c != "geometry"]
+            if c_files.sub_annual and c_files.sub_annual.partition_by:
+                for pc in c_files.sub_annual.partition_by:
+                    if (
+                        pc not in non_geo_keep
+                        and pc in all_final_cols
+                        and pc not in ("year", "date")
+                    ):
+                        non_geo_keep.append(pc)
+
             logger.info(f"Writing sub-annual parquet → {output_path}/sub-annual")
             _write_temporal_parquet_polars(
                 merged_path,
@@ -497,6 +507,15 @@ async def _write_split_parquets(
 
         if annual_cols:
             non_geo_keep = [c for c in keep_always if c != "geometry"]
+            if c_files.annual and c_files.annual.partition_by:
+                for pc in c_files.annual.partition_by:
+                    if (
+                        pc not in non_geo_keep
+                        and pc in all_final_cols
+                        and pc not in ("year", "date")
+                    ):
+                        non_geo_keep.append(pc)
+
             logger.info(f"Writing annual parquet → {output_path}/annual")
             _write_temporal_parquet_polars(
                 merged_path,

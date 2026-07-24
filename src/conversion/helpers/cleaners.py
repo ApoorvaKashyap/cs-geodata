@@ -327,7 +327,7 @@ def split_cols(layer: pl.LazyFrame) -> pl.LazyFrame:
             .alias(c)
             for c in cols
         ]
-    ).collect(engine="streaming")
+    ).collect()
 
     ok_cols = [c for c in cols if check_results[c][0] > 0]
 
@@ -402,9 +402,7 @@ def unnest_json_cols(layer: pl.LazyFrame) -> pl.LazyFrame:
     keys = None
     dtype = None
     for c in json_cols:
-        sample = (
-            layer.select(pl.col(c).drop_nulls()).head(1).collect(engine="streaming")
-        )
+        sample = layer.select(pl.col(c).drop_nulls()).head(1).collect()
         if not sample.is_empty():
             try:
                 sample_str = sample[0, 0]
