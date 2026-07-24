@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en" data-accent-color="violet" data-content_root="../../">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>cleaners - cs-geodata documentation</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="simulate" href="../simulate/index.html" /><link rel="prev" title="geojson" href="../geojson/index.html" /><script>
+    function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
+    setColorMode(localStorage._theme||"auto");
+  </script><link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=e1a1ceaf" />
+    <link rel="stylesheet" type="text/css" href="../../_static/shibuya.css?v=2ceb65ce" />
+    <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
+    <link media="print" rel="stylesheet" type="text/css" href="../../_static/print.css?v=20ff2c19" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --sy-f-text: "Inter", var(--sy-f-sys), var(--sy-f-cjk), sans-serif;
+  --sy-f-heading: "Inter", var(--sy-f-sys), var(--sy-f-cjk), sans-serif;
+}
+</style>
+    
+  <meta property="og:type" content="website"/><meta property="og:title" content="cleaners"/>
+    <meta name="twitter:card" content="summary"/>
+  </head>
+<body><div class="sy-head">
+  <div class="sy-head-blur"></div>
+  <div class="sy-head-inner sy-container mx-auto">
+    <a class="sy-head-brand" href="../../index.html">
+      
+      
+      <strong>cs-geodata</strong>
+    </a>
+    <div class="sy-head-nav" id="head-nav">
+      <nav class="sy-head-links"></nav>
+      <div class="sy-head-extra flex items-center print:hidden"><form class="searchbox flex items-center" action="../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <kbd>/</kbd>
+</form><div class="sy-head-socials"></div></div>
+    </div>
+    <div class="sy-head-actions flex items-center shrink-0 print:hidden"><button class="js-theme theme-switch flex items-center"
+data-aria-auto="Switch to light color mode"
+data-aria-light="Switch to dark color mode"
+data-aria-dark="Switch to auto color mode">
+<i class="i-lucide theme-icon"></i>
+</button><button class="md:hidden flex items-center js-menu" aria-label="Menu" type="button" aria-controls="head-nav" aria-expanded="false">
+        <div class="hamburger">
+          <span class="hamburger_1"></span>
+          <span class="hamburger_2"></span>
+          <span class="hamburger_3"></span>
+        </div>
+      </button>
+    </div>
+  </div>
+</div>
+<div class="sy-page sy-container flex mx-auto">
+  <aside id="lside" class="sy-lside md:w-72 md:shrink-0 print:hidden">
+    <div class="sy-lside-inner md:sticky">
+      <div class="sy-scrollbar p-6">
+        <div class="globaltoc" data-expand-depth="0"><p class="caption" role="heading" aria-level="3"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../settings.html">Configuration &amp; Settings</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../descriptor.html">Descriptor TOML Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../data_flow.html">Data Flow</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../base_layer_checks.html">Base Layer Pipeline</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../data_checks.html">Data Checks and Cleaning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">FastAPI Endpoints</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../api/index.html">api</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algos/index.html">algos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../merge/index.html">merge</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../layers/index.html">layers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../checks/index.html">checks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../models/index.html">models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../geojoin/index.html">geojoin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../configs/index.html">configs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../geojson/index.html">geojson</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">cleaners</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../simulate/index.html">simulate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../scheduler/index.html">scheduler</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../work_queue/index.html">work_queue</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../geoparquet/index.html">geoparquet</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../duckdb_funcs/index.html">duckdb_funcs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../redis_client/index.html">redis_client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../polars_utils/index.html">polars_utils</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </div>
+  </aside>
+  <div class="lside-overlay js-menu" role="button" aria-label="Close left sidebar" aria-controls="lside" aria-expanded="false"></div>
+  <aside id="rside" class="sy-rside pb-3 w-64 shrink-0 order-last">
+    <button class="rside-close js-menu xl:hidden" aria-label="Close Table of Contents" type="button" aria-controls="rside" aria-expanded="false">
+      <i class="i-lucide close"></i>
+    </button>
+    <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
+<li><a class="reference internal" href="#attributes">Attributes</a></li>
+<li><a class="reference internal" href="#functions">Functions</a></li>
+<li><a class="reference internal" href="#module-contents">Module Contents</a><ul>
+<li><a class="reference internal" href="#cleaners.logger"><code class="docutils literal notranslate"><span class="pre">logger</span></code></a></li>
+<li><a class="reference internal" href="#cleaners.clean_label"><code class="docutils literal notranslate"><span class="pre">clean_label()</span></code></a></li>
+<li><a class="reference internal" href="#cleaners.clean_tehsils"><code class="docutils literal notranslate"><span class="pre">clean_tehsils()</span></code></a></li>
+<li><a class="reference internal" href="#cleaners.expand_rename_globs"><code class="docutils literal notranslate"><span class="pre">expand_rename_globs()</span></code></a></li>
+<li><a class="reference internal" href="#cleaners.expand_drop_globs"><code class="docutils literal notranslate"><span class="pre">expand_drop_globs()</span></code></a></li>
+<li><a class="reference internal" href="#cleaners.rename_and_drop"><code class="docutils literal notranslate"><span class="pre">rename_and_drop()</span></code></a></li>
+<li><a class="reference internal" href="#cleaners.apply_scaling"><code class="docutils literal notranslate"><span class="pre">apply_scaling()</span></code></a></li>
+<li><a class="reference internal" href="#cleaners.get_layer_prefix"><code class="docutils literal notranslate"><span class="pre">get_layer_prefix()</span></code></a></li>
+<li><a class="reference internal" href="#cleaners.prefix_cols"><code class="docutils literal notranslate"><span class="pre">prefix_cols()</span></code></a></li>
+<li><a class="reference internal" href="#cleaners.merge_col_metadata"><code class="docutils literal notranslate"><span class="pre">merge_col_metadata()</span></code></a></li>
+<li><a class="reference internal" href="#cleaners.split_cols"><code class="docutils literal notranslate"><span class="pre">split_cols()</span></code></a></li>
+<li><a class="reference internal" href="#cleaners.unnest_json_cols"><code class="docutils literal notranslate"><span class="pre">unnest_json_cols()</span></code></a></li>
+<li><a class="reference internal" href="#cleaners.classify_columns"><code class="docutils literal notranslate"><span class="pre">classify_columns()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
+  </aside>
+  <div class="rside-overlay js-menu" role="button" aria-label="Close Table of Contents" aria-controls="rside" aria-expanded="false"></div>
+  <main class="sy-main w-full max-sm:max-w-full print:pt-6">
+<div class="sy-breadcrumbs" role="navigation">
+  <div class="sy-breadcrumbs-inner flex items-center">
+    <div class="md:hidden mr-3">
+      <button class="js-menu" aria-label="Menu" type="button" aria-controls="lside" aria-expanded="false">
+        <i class="i-lucide menu"></i>
+      </button>
+    </div>
+    <ol class="flex-1" itemscope itemtype="https://schema.org/BreadcrumbList"><li itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+        <a itemprop="item" href="../../index.html"><span itemprop="name">cs-geodata</span></a>
+        <span>/</span>
+        <meta itemprop="position" content="1" />
+      </li><li itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+        <a itemprop="item" href="../index.html"><span itemprop="name">API Reference</span></a>
+        <span>/</span>
+        <meta itemprop="position" content="2" />
+      </li><li itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+        <strong itemprop="name">cleaners</strong>
+        <meta itemprop="position" content="3" />
+      </li></ol>
+    <div class="xl:hidden ml-1">
+      <button class="js-menu" aria-label="Show table of contents" type="button" aria-controls="rside"
+        aria-expanded="false">
+        <i class="i-lucide outdent"></i>
+      </button>
+    </div>
+  </div>
+</div><div class="flex flex-col break-words justify-between">
+      <div class="relative min-w-0 max-w-6xl px-6 pb-6 pt-8 xl:px-12">
+  <article class="yue" role="main">
+          <section id="module-cleaners">
+<span id="cleaners"></span><h1>cleaners<a class="headerlink" href="#module-cleaners" title="Link to this heading">#</a></h1>
+<p>Data cleaning and column manipulation utilities.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading">#</a></h2>
+<div class="table-wrapper autosummary longtable docutils container">
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cleaners.logger" title="cleaners.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading">#</a></h2>
+<div class="table-wrapper autosummary longtable docutils container">
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cleaners.clean_label" title="cleaners.clean_label"><code class="xref py py-obj docutils literal notranslate"><span class="pre">clean_label</span></code></a>(→ str)</p></td>
+<td><p>Normalise a location label to a safe, lowercase slug.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cleaners.clean_tehsils" title="cleaners.clean_tehsils"><code class="xref py py-obj docutils literal notranslate"><span class="pre">clean_tehsils</span></code></a>(→ polars.LazyFrame)</p></td>
+<td><p>Extract and normalize tehsils from the active areas API response.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cleaners.expand_rename_globs" title="cleaners.expand_rename_globs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">expand_rename_globs</span></code></a>(→ dict[str, str])</p></td>
+<td><p>Expand a dictionary with glob patterns into explicit column renames.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cleaners.expand_drop_globs" title="cleaners.expand_drop_globs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">expand_drop_globs</span></code></a>(→ list[str])</p></td>
+<td><p>Expand a list of column names with optional glob patterns.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cleaners.rename_and_drop" title="cleaners.rename_and_drop"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rename_and_drop</span></code></a>(→ polars.LazyFrame)</p></td>
+<td><p>Rename columns and drop specified columns from a layer.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cleaners.apply_scaling" title="cleaners.apply_scaling"><code class="xref py py-obj docutils literal notranslate"><span class="pre">apply_scaling</span></code></a>(→ polars.LazyFrame)</p></td>
+<td><p>Multiply matching columns by the specified factor.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cleaners.get_layer_prefix" title="cleaners.get_layer_prefix"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_layer_prefix</span></code></a>(→ str)</p></td>
+<td><p>Derive a short 2-character prefix for each layer name.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cleaners.prefix_cols" title="cleaners.prefix_cols"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prefix_cols</span></code></a>(→ polars.LazyFrame)</p></td>
+<td><p>Prefix non-common columns with the derived layer prefix.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cleaners.merge_col_metadata" title="cleaners.merge_col_metadata"><code class="xref py py-obj docutils literal notranslate"><span class="pre">merge_col_metadata</span></code></a>(→ polars.LazyFrame)</p></td>
+<td><p>Join layer version metadata with active tehsil information.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cleaners.split_cols" title="cleaners.split_cols"><code class="xref py py-obj docutils literal notranslate"><span class="pre">split_cols</span></code></a>(→ polars.LazyFrame)</p></td>
+<td><p>Split range-based string columns into min/max numeric columns.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cleaners.unnest_json_cols" title="cleaners.unnest_json_cols"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unnest_json_cols</span></code></a>(→ polars.LazyFrame)</p></td>
+<td><p>Unnest columns containing JSON dicts into separate columns.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cleaners.classify_columns" title="cleaners.classify_columns"><code class="xref py py-obj docutils literal notranslate"><span class="pre">classify_columns</span></code></a>(→ tuple[list[str], list[str], list[str]])</p></td>
+<td><p>Classify merged-frame column names into static, sub-annual, and annual buckets.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading">#</a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cleaners.logger">
+<span class="sig-prename descclassname"><span class="pre">cleaners.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cleaners.logger" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cleaners.clean_label">
+<span class="sig-prename descclassname"><span class="pre">cleaners.</span></span><span class="sig-name descname"><span class="pre">clean_label</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">label</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cleaners.clean_label" title="Link to this definition">#</a></dt>
+<dd><p>Normalise a location label to a safe, lowercase slug.</p>
+<p>Collapses any run of non-alphanumeric characters to a single underscore
+and strips leading/trailing underscores.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>label</strong> – The original label string.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The cleaned label string.</p>
+</dd>
+</dl>
+<p>Examples:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span data-line="1"><span class="s2">&quot;Raipur District&quot;</span>  <span class="o">-&gt;</span> <span class="s2">&quot;raipur_district&quot;</span>
+</span><span data-line="2"><span class="s2">&quot;North-East Delhi&quot;</span> <span class="o">-&gt;</span> <span class="s2">&quot;north_east_delhi&quot;</span>
+</span><span data-line="3"><span class="s2">&quot;  Pune  &quot;</span>         <span class="o">-&gt;</span> <span class="s2">&quot;pune&quot;</span>
+</span></pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cleaners.clean_tehsils">
+<span class="sig-prename descclassname"><span class="pre">cleaners.</span></span><span class="sig-name descname"><span class="pre">clean_tehsils</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">response</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">polars.DataFrame</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">polars.LazyFrame</span></span></span><a class="headerlink" href="#cleaners.clean_tehsils" title="Link to this definition">#</a></dt>
+<dd><p>Extract and normalize tehsils from the active areas API response.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>response</strong> – The raw DataFrame containing nested district/tehsil data.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A LazyFrame exploded to the tehsil level with state_name, district_name,
+and tehsil_name.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cleaners.expand_rename_globs">
+<span class="sig-prename descclassname"><span class="pre">cleaners.</span></span><span class="sig-name descname"><span class="pre">expand_rename_globs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cols</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rename_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cleaners.expand_rename_globs" title="Link to this definition">#</a></dt>
+<dd><p>Expand a dictionary with glob patterns into explicit column renames.</p>
+<p>E.g., {“k_*”: “kharif_*”} applied to [“k_2018”, “k_2019”]
+returns {“k_2018”: “kharif_2018”, “k_2019”: “kharif_2019”}.
+Non-glob exact matches are kept as is, but are matched case-insensitively.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>cols</strong> – List of column names to check.</p></li>
+<li><p><strong>rename_dict</strong> – Dictionary mapping glob patterns or names to target names.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cleaners.expand_drop_globs">
+<span class="sig-prename descclassname"><span class="pre">cleaners.</span></span><span class="sig-name descname"><span class="pre">expand_drop_globs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cols</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">drop_list</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cleaners.expand_drop_globs" title="Link to this definition">#</a></dt>
+<dd><p>Expand a list of column names with optional glob patterns.</p>
+<p>E.g. [“prefix_*”, “exact_name”] -&gt; [“prefix_1”, “prefix_2”, “exact_name”].</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>cols</strong> – List of column names to check.</p></li>
+<li><p><strong>drop_list</strong> – List of glob patterns or column names to drop.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cleaners.rename_and_drop">
+<span class="sig-prename descclassname"><span class="pre">cleaners.</span></span><span class="sig-name descname"><span class="pre">rename_and_drop</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">layer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">polars.LazyFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rename</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">drop</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">polars.LazyFrame</span></span></span><a class="headerlink" href="#cleaners.rename_and_drop" title="Link to this definition">#</a></dt>
+<dd><p>Rename columns and drop specified columns from a layer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>layer</strong> – The layer LazyFrame to process.</p></li>
+<li><p><strong>rename</strong> – Dictionary mapping original names to target names.</p></li>
+<li><p><strong>drop</strong> – List of column names to drop.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The processed LazyFrame with lowercased column names.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cleaners.apply_scaling">
+<span class="sig-prename descclassname"><span class="pre">cleaners.</span></span><span class="sig-name descname"><span class="pre">apply_scaling</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">layer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">polars.LazyFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">polars.LazyFrame</span></span></span><a class="headerlink" href="#cleaners.apply_scaling" title="Link to this definition">#</a></dt>
+<dd><p>Multiply matching columns by the specified factor.</p>
+<p>Supports glob patterns in scale_dict keys.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>layer</strong> – The layer LazyFrame.</p></li>
+<li><p><strong>scale_dict</strong> – Dictionary mapping column names (or globs) to a multiplication factor.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cleaners.get_layer_prefix">
+<span class="sig-prename descclassname"><span class="pre">cleaners.</span></span><span class="sig-name descname"><span class="pre">get_layer_prefix</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">layer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cleaners.get_layer_prefix" title="Link to this definition">#</a></dt>
+<dd><p>Derive a short 2-character prefix for each layer name.</p>
+<p>Rules (in order):</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;annual_balance&quot;</span></code> → first char of each <code class="docutils literal notranslate"><span class="pre">&quot;_&quot;</span></code>-separated part → <code class="docutils literal notranslate"><span class="pre">&quot;ab_&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;water-balance&quot;</span></code>  → first char of each <code class="docutils literal notranslate"><span class="pre">&quot;-&quot;</span></code>-separated part → <code class="docutils literal notranslate"><span class="pre">&quot;wb_&quot;</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;aquifer&quot;</span></code>        → first two chars + <code class="docutils literal notranslate"><span class="pre">&quot;_&quot;</span></code>                 → <code class="docutils literal notranslate"><span class="pre">&quot;aq_&quot;</span></code></p></li>
+</ul>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>layer</strong> – The full layer name.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A 2-3 character string prefix.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cleaners.prefix_cols">
+<span class="sig-prename descclassname"><span class="pre">cleaners.</span></span><span class="sig-name descname"><span class="pre">prefix_cols</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">layer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">polars.LazyFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">layer_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">common_cols</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">polars.LazyFrame</span></span></span><a class="headerlink" href="#cleaners.prefix_cols" title="Link to this definition">#</a></dt>
+<dd><p>Prefix non-common columns with the derived layer prefix.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>layer</strong> – The layer LazyFrame.</p></li>
+<li><p><strong>layer_name</strong> – Name of the layer used to derive the prefix.</p></li>
+<li><p><strong>common_cols</strong> – List of common column names to exclude from prefixing.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The LazyFrame with specific columns prefixed.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cleaners.merge_col_metadata">
+<span class="sig-prename descclassname"><span class="pre">cleaners.</span></span><span class="sig-name descname"><span class="pre">merge_col_metadata</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">version</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">polars.LazyFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tehsils</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">polars.LazyFrame</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">polars.LazyFrame</span></span></span><a class="headerlink" href="#cleaners.merge_col_metadata" title="Link to this definition">#</a></dt>
+<dd><p>Join layer version metadata with active tehsil information.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>version</strong> – LazyFrame containing version metadata.</p></li>
+<li><p><strong>tehsils</strong> – LazyFrame containing tehsil information.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A merged LazyFrame combining version metadata with tehsil identities.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cleaners.split_cols">
+<span class="sig-prename descclassname"><span class="pre">cleaners.</span></span><span class="sig-name descname"><span class="pre">split_cols</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">layer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">polars.LazyFrame</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">polars.LazyFrame</span></span></span><a class="headerlink" href="#cleaners.split_cols" title="Link to this definition">#</a></dt>
+<dd><p>Split range-based string columns into min/max numeric columns.</p>
+<p>Detects columns containing ranges (e.g. “30 - 200”, “2160 to 4752”) and
+generates two new columns (<cite>col_min</cite>, <cite>col_max</cite>) for each matching column,
+dropping the original string column.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>layer</strong> – The layer LazyFrame to process.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The LazyFrame with range columns split into min/max bounds.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cleaners.unnest_json_cols">
+<span class="sig-prename descclassname"><span class="pre">cleaners.</span></span><span class="sig-name descname"><span class="pre">unnest_json_cols</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">layer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">polars.LazyFrame</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">polars.LazyFrame</span></span></span><a class="headerlink" href="#cleaners.unnest_json_cols" title="Link to this definition">#</a></dt>
+<dd><p>Unnest columns containing JSON dicts into separate columns.</p>
+<p>E.g. dw_2019_2020 containing {“DeltaG”: 10.0} becomes dw_deltag_2019_2020</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>layer</strong> – The layer LazyFrame to process.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The LazyFrame with unnested JSON attributes as separate columns.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cleaners.classify_columns">
+<span class="sig-prename descclassname"><span class="pre">cleaners.</span></span><span class="sig-name descname"><span class="pre">classify_columns</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cols</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_always</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cleaners.classify_columns" title="Link to this definition">#</a></dt>
+<dd><p>Classify merged-frame column names into static, sub-annual, and annual buckets.</p>
+<p>Classification rules (applied in order):</p>
+<ol class="arabic simple">
+<li><p>Columns in <em>keep_always</em> → static (identity / common columns).</p></li>
+<li><p>Columns whose name contains the substring <code class="docutils literal notranslate"><span class="pre">&quot;net&quot;</span></code> → dropped entirely
+(they hold derived data that is not needed downstream).</p></li>
+<li><p>Columns whose name ends with an ISO date (<code class="docutils literal notranslate"><span class="pre">YYYY-MM-DD</span></code>) → sub-annual.</p></li>
+<li><p>Columns whose name contains a year-range (<code class="docutils literal notranslate"><span class="pre">YYYY_YYYY</span></code> / <code class="docutils literal notranslate"><span class="pre">YYYY-YYYY</span></code>)
+or a bare four-digit year anywhere → annual.</p></li>
+<li><p>Everything else → static.</p></li>
+</ol>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>cols</strong> – All column names from the merged frame.</p></li>
+<li><p><strong>keep_always</strong> – Column names that must always land in the static bucket
+(e.g. <code class="docutils literal notranslate"><span class="pre">[&quot;mws_id&quot;,</span> <span class="pre">&quot;geometry&quot;,</span> <span class="pre">&quot;tehsil&quot;,</span> <span class="pre">...]</span></code>).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A 3-tuple <code class="docutils literal notranslate"><span class="pre">(static_cols,</span> <span class="pre">sub_annual_cols,</span> <span class="pre">annual_cols)</span></code> where every
+column in <em>cols</em> appears in exactly one bucket, or is silently dropped
+(net columns).</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+</section>
+
+        </article><button class="back-to-top" type="button">
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+    <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+  </svg>
+  <span>Back to top</span>
+</button><div class="navigation flex print:hidden"><div class="navigation-prev">
+    <a href="../geojson/index.html">
+      <i class="i-lucide chevron-left"></i>
+      <div class="page-info">
+        <span>Previous</span><div class="title">geojson</div></div>
+    </a>
+  </div><div class="navigation-next">
+    <a href="../simulate/index.html">
+      <div class="page-info">
+        <span>Next</span>
+        <div class="title">simulate</div>
+      </div>
+      <i class="i-lucide chevron-right"></i>
+    </a>
+  </div></div></div>
+    </div>
+  </main>
+</div>
+<footer class="sy-foot">
+  <div class="sy-foot-inner sy-container mx-auto">
+    <div class="sy-foot-reserved md:flex justify-between items-center">
+      <div class="sy-foot-copyright"><p>2026, Apoorva Kashyap</p>
+  
+  <p>
+    Made with
+    
+    <a href="https://www.sphinx-doc.org/">Sphinx</a> and
+    
+    <a href="https://shibuya.lepture.com">Shibuya theme</a>.
+  </p>
+</div>
+      <div class="sy-foot-socials"></div>
+    </div>
+  </div>
+</footer>
+      <script src="../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../../_static/copybutton.js?v=f281be69"></script>
+      <script src="../../_static/shibuya.js?v=50760d75"></script></body>
+</html>

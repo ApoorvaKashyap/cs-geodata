@@ -1,0 +1,71 @@
+layers
+======
+
+.. py:module:: layers
+
+.. autoapi-nested-parse::
+
+   RQ worker entry points and API route handlers for layer operations.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   layers.handle_layers
+   layers.layer_conversion
+   layers.handle_standardise
+   layers.standardise_conversion
+   layers.base_layer_cache
+
+
+Module Contents
+---------------
+
+.. py:function:: handle_layers(request: src.app.models.ConversionRequest) -> dict
+
+   Enqueue a layer conversion job.
+
+   :param request: The API request payload.
+
+   :returns: A dictionary containing the task ID and status.
+
+
+.. py:function:: layer_conversion(request: src.app.models.ConversionRequest) -> None
+
+   RQ worker entry point.
+
+   Fetches the TOML descriptor fresh from the URL, builds a
+   LayerConversionRequest, and runs the pipeline.
+
+   :param request: Lightweight API payload containing the descriptor URL and
+                   output path.
+
+
+.. py:function:: handle_standardise(request: src.app.models.StandardiseRequest) -> dict
+
+   Enqueue a standardise conversion job.
+
+   :param request: The API request payload.
+
+   :returns: A dictionary containing the task ID and status.
+
+
+.. py:function:: standardise_conversion(request: src.app.models.StandardiseRequest) -> None
+
+   RQ worker entry point for standardise requests.
+
+   :param request: The StandardiseRequest payload.
+
+
+.. py:function:: base_layer_cache(request: src.app.models.BaseLayers) -> dict[str, str]
+
+   Enqueue a base layer caching job.
+
+   :param request: The API request payload.
+
+   :returns: A dictionary containing the task ID and status.
+
+

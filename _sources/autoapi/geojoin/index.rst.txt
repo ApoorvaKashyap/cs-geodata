@@ -1,0 +1,58 @@
+geojoin
+=======
+
+.. py:module:: geojoin
+
+.. autoapi-nested-parse::
+
+   Spatial join and boundary filling utilities.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   geojoin.BATCH_SIZE
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   geojoin.fill_missing_admin_boundaries
+
+
+Module Contents
+---------------
+
+.. py:data:: BATCH_SIZE
+   :value: 25000
+
+
+.. py:function:: fill_missing_admin_boundaries(merged: polars.LazyFrame, tehsils_path: str, entity_key: str = 'mws_id') -> polars.LazyFrame
+
+   Fill missing administrative boundaries using a polygon-intersection spatial join.
+
+   Each entity polygon is intersected against the tehsil boundaries and assigned
+   **all** overlapping tehsils as a sorted, deduplicated list.  This correctly
+   handles entities (e.g. large watersheds) that span more than one tehsil.
+
+   Entities that already carry admin data have their scalar ``state``,
+   ``district``, and ``tehsil`` columns wrapped into 1-element lists so that
+   the final output schema is uniform: every row has ``List[String]`` for all
+   three admin columns.
+
+   Batches the intersection join to avoid memory limits in DuckDB.
+
+   :param merged: LazyFrame containing the merged entity data.
+   :param tehsils_path: Path to the raw tehsil boundaries shapefile/geopackage.
+   :param entity_key: Primary-key column name. Defaults to ``'mws_id'``.
+
+   :returns: A LazyFrame where ``state``, ``district``, and ``tehsil`` are typed as
+             ``List[String]``.  Entities with no intersecting tehsil carry empty
+             lists for those fields.
+
+

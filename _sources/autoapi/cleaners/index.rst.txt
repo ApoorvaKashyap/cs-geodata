@@ -1,0 +1,198 @@
+cleaners
+========
+
+.. py:module:: cleaners
+
+.. autoapi-nested-parse::
+
+   Data cleaning and column manipulation utilities.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cleaners.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cleaners.clean_label
+   cleaners.clean_tehsils
+   cleaners.expand_rename_globs
+   cleaners.expand_drop_globs
+   cleaners.rename_and_drop
+   cleaners.apply_scaling
+   cleaners.get_layer_prefix
+   cleaners.prefix_cols
+   cleaners.merge_col_metadata
+   cleaners.split_cols
+   cleaners.unnest_json_cols
+   cleaners.classify_columns
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: clean_label(label: str) -> str
+
+   Normalise a location label to a safe, lowercase slug.
+
+   Collapses any run of non-alphanumeric characters to a single underscore
+   and strips leading/trailing underscores.
+
+   :param label: The original label string.
+
+   :returns: The cleaned label string.
+
+   Examples::
+
+       "Raipur District"  -> "raipur_district"
+       "North-East Delhi" -> "north_east_delhi"
+       "  Pune  "         -> "pune"
+
+
+
+.. py:function:: clean_tehsils(response: polars.DataFrame) -> polars.LazyFrame
+
+   Extract and normalize tehsils from the active areas API response.
+
+   :param response: The raw DataFrame containing nested district/tehsil data.
+
+   :returns: A LazyFrame exploded to the tehsil level with state_name, district_name,
+             and tehsil_name.
+
+
+.. py:function:: expand_rename_globs(cols: list[str], rename_dict: dict[str, str]) -> dict[str, str]
+
+   Expand a dictionary with glob patterns into explicit column renames.
+
+   E.g., {"k_*": "kharif_*"} applied to ["k_2018", "k_2019"]
+   returns {"k_2018": "kharif_2018", "k_2019": "kharif_2019"}.
+   Non-glob exact matches are kept as is, but are matched case-insensitively.
+
+   :param cols: List of column names to check.
+   :param rename_dict: Dictionary mapping glob patterns or names to target names.
+
+
+.. py:function:: expand_drop_globs(cols: list[str], drop_list: list[str]) -> list[str]
+
+   Expand a list of column names with optional glob patterns.
+
+   E.g. ["prefix_*", "exact_name"] -> ["prefix_1", "prefix_2", "exact_name"].
+
+   :param cols: List of column names to check.
+   :param drop_list: List of glob patterns or column names to drop.
+
+
+.. py:function:: rename_and_drop(layer: polars.LazyFrame, rename: dict[str, str], drop: list[str]) -> polars.LazyFrame
+
+   Rename columns and drop specified columns from a layer.
+
+   :param layer: The layer LazyFrame to process.
+   :param rename: Dictionary mapping original names to target names.
+   :param drop: List of column names to drop.
+
+   :returns: The processed LazyFrame with lowercased column names.
+
+
+.. py:function:: apply_scaling(layer: polars.LazyFrame, scale_dict: dict[str, float]) -> polars.LazyFrame
+
+   Multiply matching columns by the specified factor.
+
+   Supports glob patterns in scale_dict keys.
+
+   :param layer: The layer LazyFrame.
+   :param scale_dict: Dictionary mapping column names (or globs) to a multiplication factor.
+
+
+.. py:function:: get_layer_prefix(layer: str) -> str
+
+   Derive a short 2-character prefix for each layer name.
+
+   Rules (in order):
+
+   - ``"annual_balance"`` → first char of each ``"_"``-separated part → ``"ab_"``
+   - ``"water-balance"``  → first char of each ``"-"``-separated part → ``"wb_"``
+   - ``"aquifer"``        → first two chars + ``"_"``                 → ``"aq_"``
+
+   :param layer: The full layer name.
+
+   :returns: A 2-3 character string prefix.
+
+
+.. py:function:: prefix_cols(layer: polars.LazyFrame, layer_name: str, common_cols: list[str]) -> polars.LazyFrame
+
+   Prefix non-common columns with the derived layer prefix.
+
+   :param layer: The layer LazyFrame.
+   :param layer_name: Name of the layer used to derive the prefix.
+   :param common_cols: List of common column names to exclude from prefixing.
+
+   :returns: The LazyFrame with specific columns prefixed.
+
+
+.. py:function:: merge_col_metadata(version: polars.LazyFrame, tehsils: polars.LazyFrame) -> polars.LazyFrame
+
+   Join layer version metadata with active tehsil information.
+
+   :param version: LazyFrame containing version metadata.
+   :param tehsils: LazyFrame containing tehsil information.
+
+   :returns: A merged LazyFrame combining version metadata with tehsil identities.
+
+
+.. py:function:: split_cols(layer: polars.LazyFrame) -> polars.LazyFrame
+
+   Split range-based string columns into min/max numeric columns.
+
+   Detects columns containing ranges (e.g. "30 - 200", "2160 to 4752") and
+   generates two new columns (`col_min`, `col_max`) for each matching column,
+   dropping the original string column.
+
+   :param layer: The layer LazyFrame to process.
+
+   :returns: The LazyFrame with range columns split into min/max bounds.
+
+
+.. py:function:: unnest_json_cols(layer: polars.LazyFrame) -> polars.LazyFrame
+
+   Unnest columns containing JSON dicts into separate columns.
+
+   E.g. dw_2019_2020 containing {"DeltaG": 10.0} becomes dw_deltag_2019_2020
+
+   :param layer: The layer LazyFrame to process.
+
+   :returns: The LazyFrame with unnested JSON attributes as separate columns.
+
+
+.. py:function:: classify_columns(cols: list[str], keep_always: list[str]) -> tuple[list[str], list[str], list[str]]
+
+   Classify merged-frame column names into static, sub-annual, and annual buckets.
+
+   Classification rules (applied in order):
+
+   1. Columns in *keep_always* → static (identity / common columns).
+   2. Columns whose name contains the substring ``"net"`` → dropped entirely
+      (they hold derived data that is not needed downstream).
+   3. Columns whose name ends with an ISO date (``YYYY-MM-DD``) → sub-annual.
+   4. Columns whose name contains a year-range (``YYYY_YYYY`` / ``YYYY-YYYY``)
+      or a bare four-digit year anywhere → annual.
+   5. Everything else → static.
+
+   :param cols: All column names from the merged frame.
+   :param keep_always: Column names that must always land in the static bucket
+                       (e.g. ``["mws_id", "geometry", "tehsil", ...]``).
+
+   :returns: A 3-tuple ``(static_cols, sub_annual_cols, annual_cols)`` where every
+             column in *cols* appears in exactly one bucket, or is silently dropped
+             (net columns).
+
+

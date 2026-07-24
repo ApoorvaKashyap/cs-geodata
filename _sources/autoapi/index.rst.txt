@@ -1,0 +1,27 @@
+API Reference
+=============
+
+This page contains auto-generated API reference documentation [#f1]_.
+
+.. toctree::
+   :titlesonly:
+
+   /autoapi/api/index
+   /autoapi/algos/index
+   /autoapi/merge/index
+   /autoapi/layers/index
+   /autoapi/checks/index
+   /autoapi/models/index
+   /autoapi/geojoin/index
+   /autoapi/configs/index
+   /autoapi/geojson/index
+   /autoapi/cleaners/index
+   /autoapi/simulate/index
+   /autoapi/scheduler/index
+   /autoapi/work_queue/index
+   /autoapi/geoparquet/index
+   /autoapi/duckdb_funcs/index
+   /autoapi/redis_client/index
+   /autoapi/polars_utils/index
+
+.. [#f1] Created with `sphinx-autoapi <https://github.com/readthedocs/sphinx-autoapi>`_

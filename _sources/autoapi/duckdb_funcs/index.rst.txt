@@ -1,0 +1,34 @@
+duckdb_funcs
+============
+
+.. py:module:: duckdb_funcs
+
+.. autoapi-nested-parse::
+
+   DuckDB connection and extension initialization utilities.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   duckdb_funcs.init_duckdb
+
+
+Module Contents
+---------------
+
+.. py:function:: init_duckdb() -> duckdb.DuckDBPyConnection
+
+   Initialize a DuckDB connection with required extensions and settings.
+
+   Sets up a temporary DuckDB database file, loads spatial and S3 extensions,
+   and configures AWS credentials using the default credential chain.
+
+   :returns: An active DuckDB connection object.
+
+   :raises RuntimeError: If DuckDB initialization fails.
+
+

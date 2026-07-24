@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en" data-accent-color="violet" data-content_root="../../">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>models - cs-geodata documentation</title><link rel="index" title="Index" href="../../genindex.html" /><link rel="search" title="Search" href="../../search.html" /><link rel="next" title="geojoin" href="../geojoin/index.html" /><link rel="prev" title="checks" href="../checks/index.html" /><script>
+    function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
+    setColorMode(localStorage._theme||"auto");
+  </script><link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=e1a1ceaf" />
+    <link rel="stylesheet" type="text/css" href="../../_static/shibuya.css?v=2ceb65ce" />
+    <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
+    <link media="print" rel="stylesheet" type="text/css" href="../../_static/print.css?v=20ff2c19" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --sy-f-text: "Inter", var(--sy-f-sys), var(--sy-f-cjk), sans-serif;
+  --sy-f-heading: "Inter", var(--sy-f-sys), var(--sy-f-cjk), sans-serif;
+}
+</style>
+    
+  <meta property="og:type" content="website"/><meta property="og:title" content="models"/>
+    <meta name="twitter:card" content="summary"/>
+  </head>
+<body><div class="sy-head">
+  <div class="sy-head-blur"></div>
+  <div class="sy-head-inner sy-container mx-auto">
+    <a class="sy-head-brand" href="../../index.html">
+      
+      
+      <strong>cs-geodata</strong>
+    </a>
+    <div class="sy-head-nav" id="head-nav">
+      <nav class="sy-head-links"></nav>
+      <div class="sy-head-extra flex items-center print:hidden"><form class="searchbox flex items-center" action="../../search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <kbd>/</kbd>
+</form><div class="sy-head-socials"></div></div>
+    </div>
+    <div class="sy-head-actions flex items-center shrink-0 print:hidden"><button class="js-theme theme-switch flex items-center"
+data-aria-auto="Switch to light color mode"
+data-aria-light="Switch to dark color mode"
+data-aria-dark="Switch to auto color mode">
+<i class="i-lucide theme-icon"></i>
+</button><button class="md:hidden flex items-center js-menu" aria-label="Menu" type="button" aria-controls="head-nav" aria-expanded="false">
+        <div class="hamburger">
+          <span class="hamburger_1"></span>
+          <span class="hamburger_2"></span>
+          <span class="hamburger_3"></span>
+        </div>
+      </button>
+    </div>
+  </div>
+</div>
+<div class="sy-page sy-container flex mx-auto">
+  <aside id="lside" class="sy-lside md:w-72 md:shrink-0 print:hidden">
+    <div class="sy-lside-inner md:sticky">
+      <div class="sy-scrollbar p-6">
+        <div class="globaltoc" data-expand-depth="0"><p class="caption" role="heading" aria-level="3"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../settings.html">Configuration &amp; Settings</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../descriptor.html">Descriptor TOML Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../data_flow.html">Data Flow</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../base_layer_checks.html">Base Layer Pipeline</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../data_checks.html">Data Checks and Cleaning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api.html">FastAPI Endpoints</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../api/index.html">api</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algos/index.html">algos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../merge/index.html">merge</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../layers/index.html">layers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../checks/index.html">checks</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../geojoin/index.html">geojoin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../configs/index.html">configs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../geojson/index.html">geojson</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cleaners/index.html">cleaners</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../simulate/index.html">simulate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../scheduler/index.html">scheduler</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../work_queue/index.html">work_queue</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../geoparquet/index.html">geoparquet</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../duckdb_funcs/index.html">duckdb_funcs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../redis_client/index.html">redis_client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../polars_utils/index.html">polars_utils</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </div>
+  </aside>
+  <div class="lside-overlay js-menu" role="button" aria-label="Close left sidebar" aria-controls="lside" aria-expanded="false"></div>
+  <aside id="rside" class="sy-rside pb-3 w-64 shrink-0 order-last">
+    <button class="rside-close js-menu xl:hidden" aria-label="Close Table of Contents" type="button" aria-controls="rside" aria-expanded="false">
+      <i class="i-lucide close"></i>
+    </button>
+    <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
+<li><a class="reference internal" href="#attributes">Attributes</a></li>
+<li><a class="reference internal" href="#classes">Classes</a></li>
+<li><a class="reference internal" href="#functions">Functions</a></li>
+<li><a class="reference internal" href="#module-contents">Module Contents</a><ul>
+<li><a class="reference internal" href="#models.S3Path"><code class="docutils literal notranslate"><span class="pre">S3Path</span></code></a></li>
+<li><a class="reference internal" href="#models.LocationField"><code class="docutils literal notranslate"><span class="pre">LocationField</span></code></a></li>
+<li><a class="reference internal" href="#models.LayerDescriptor"><code class="docutils literal notranslate"><span class="pre">LayerDescriptor</span></code></a><ul>
+<li><a class="reference internal" href="#models.LayerDescriptor.name"><code class="docutils literal notranslate"><span class="pre">LayerDescriptor.name</span></code></a></li>
+<li><a class="reference internal" href="#models.LayerDescriptor.type"><code class="docutils literal notranslate"><span class="pre">LayerDescriptor.type</span></code></a></li>
+<li><a class="reference internal" href="#models.LayerDescriptor.source"><code class="docutils literal notranslate"><span class="pre">LayerDescriptor.source</span></code></a></li>
+<li><a class="reference internal" href="#models.LayerDescriptor.stac_item"><code class="docutils literal notranslate"><span class="pre">LayerDescriptor.stac_item</span></code></a></li>
+<li><a class="reference internal" href="#models.LayerDescriptor.sample_item"><code class="docutils literal notranslate"><span class="pre">LayerDescriptor.sample_item</span></code></a></li>
+<li><a class="reference internal" href="#models.LayerDescriptor.url_template"><code class="docutils literal notranslate"><span class="pre">LayerDescriptor.url_template</span></code></a></li>
+<li><a class="reference internal" href="#models.LayerDescriptor.drop"><code class="docutils literal notranslate"><span class="pre">LayerDescriptor.drop</span></code></a></li>
+<li><a class="reference internal" href="#models.LayerDescriptor.rename"><code class="docutils literal notranslate"><span class="pre">LayerDescriptor.rename</span></code></a></li>
+<li><a class="reference internal" href="#models.LayerDescriptor.scale"><code class="docutils literal notranslate"><span class="pre">LayerDescriptor.scale</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#models.StaticParquetFileConfig"><code class="docutils literal notranslate"><span class="pre">StaticParquetFileConfig</span></code></a><ul>
+<li><a class="reference internal" href="#models.StaticParquetFileConfig.partition_by"><code class="docutils literal notranslate"><span class="pre">StaticParquetFileConfig.partition_by</span></code></a></li>
+<li><a class="reference internal" href="#models.StaticParquetFileConfig.row_group_size"><code class="docutils literal notranslate"><span class="pre">StaticParquetFileConfig.row_group_size</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#models.TemporalParquetFileConfig"><code class="docutils literal notranslate"><span class="pre">TemporalParquetFileConfig</span></code></a><ul>
+<li><a class="reference internal" href="#models.TemporalParquetFileConfig.partition_by"><code class="docutils literal notranslate"><span class="pre">TemporalParquetFileConfig.partition_by</span></code></a></li>
+<li><a class="reference internal" href="#models.TemporalParquetFileConfig.row_group_size"><code class="docutils literal notranslate"><span class="pre">TemporalParquetFileConfig.row_group_size</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#models.ConvertedFilesConfig"><code class="docutils literal notranslate"><span class="pre">ConvertedFilesConfig</span></code></a><ul>
+<li><a class="reference internal" href="#models.ConvertedFilesConfig.static"><code class="docutils literal notranslate"><span class="pre">ConvertedFilesConfig.static</span></code></a></li>
+<li><a class="reference internal" href="#models.ConvertedFilesConfig.annual"><code class="docutils literal notranslate"><span class="pre">ConvertedFilesConfig.annual</span></code></a></li>
+<li><a class="reference internal" href="#models.ConvertedFilesConfig.sub_annual"><code class="docutils literal notranslate"><span class="pre">ConvertedFilesConfig.sub_annual</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#models.LayerConversionRequest"><code class="docutils literal notranslate"><span class="pre">LayerConversionRequest</span></code></a><ul>
+<li><a class="reference internal" href="#models.LayerConversionRequest.entity"><code class="docutils literal notranslate"><span class="pre">LayerConversionRequest.entity</span></code></a></li>
+<li><a class="reference internal" href="#models.LayerConversionRequest.key"><code class="docutils literal notranslate"><span class="pre">LayerConversionRequest.key</span></code></a></li>
+<li><a class="reference internal" href="#models.LayerConversionRequest.geometry"><code class="docutils literal notranslate"><span class="pre">LayerConversionRequest.geometry</span></code></a></li>
+<li><a class="reference internal" href="#models.LayerConversionRequest.base"><code class="docutils literal notranslate"><span class="pre">LayerConversionRequest.base</span></code></a></li>
+<li><a class="reference internal" href="#models.LayerConversionRequest.min_version"><code class="docutils literal notranslate"><span class="pre">LayerConversionRequest.min_version</span></code></a></li>
+<li><a class="reference internal" href="#models.LayerConversionRequest.max_version"><code class="docutils literal notranslate"><span class="pre">LayerConversionRequest.max_version</span></code></a></li>
+<li><a class="reference internal" href="#models.LayerConversionRequest.layer_version"><code class="docutils literal notranslate"><span class="pre">LayerConversionRequest.layer_version</span></code></a></li>
+<li><a class="reference internal" href="#models.LayerConversionRequest.output_path"><code class="docutils literal notranslate"><span class="pre">LayerConversionRequest.output_path</span></code></a></li>
+<li><a class="reference internal" href="#models.LayerConversionRequest.super_layer_source"><code class="docutils literal notranslate"><span class="pre">LayerConversionRequest.super_layer_source</span></code></a></li>
+<li><a class="reference internal" href="#models.LayerConversionRequest.super_layer_key"><code class="docutils literal notranslate"><span class="pre">LayerConversionRequest.super_layer_key</span></code></a></li>
+<li><a class="reference internal" href="#models.LayerConversionRequest.super_field"><code class="docutils literal notranslate"><span class="pre">LayerConversionRequest.super_field</span></code></a></li>
+<li><a class="reference internal" href="#models.LayerConversionRequest.converted_files"><code class="docutils literal notranslate"><span class="pre">LayerConversionRequest.converted_files</span></code></a></li>
+<li><a class="reference internal" href="#models.LayerConversionRequest.add_admin"><code class="docutils literal notranslate"><span class="pre">LayerConversionRequest.add_admin</span></code></a></li>
+<li><a class="reference internal" href="#models.LayerConversionRequest.layers"><code class="docutils literal notranslate"><span class="pre">LayerConversionRequest.layers</span></code></a></li>
+<li><a class="reference internal" href="#models.LayerConversionRequest.base_layer_descriptor"><code class="docutils literal notranslate"><span class="pre">LayerConversionRequest.base_layer_descriptor</span></code></a></li>
+<li><a class="reference internal" href="#models.LayerConversionRequest.attribute_layers"><code class="docutils literal notranslate"><span class="pre">LayerConversionRequest.attribute_layers</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#models.ConversionRequest"><code class="docutils literal notranslate"><span class="pre">ConversionRequest</span></code></a><ul>
+<li><a class="reference internal" href="#models.ConversionRequest.descriptor_url"><code class="docutils literal notranslate"><span class="pre">ConversionRequest.descriptor_url</span></code></a></li>
+<li><a class="reference internal" href="#models.ConversionRequest.output_path"><code class="docutils literal notranslate"><span class="pre">ConversionRequest.output_path</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#models.BaseLayers"><code class="docutils literal notranslate"><span class="pre">BaseLayers</span></code></a><ul>
+<li><a class="reference internal" href="#models.BaseLayers.base_layer_source"><code class="docutils literal notranslate"><span class="pre">BaseLayers.base_layer_source</span></code></a></li>
+<li><a class="reference internal" href="#models.BaseLayers.output_path"><code class="docutils literal notranslate"><span class="pre">BaseLayers.output_path</span></code></a></li>
+<li><a class="reference internal" href="#models.BaseLayers.super_layer_source"><code class="docutils literal notranslate"><span class="pre">BaseLayers.super_layer_source</span></code></a></li>
+<li><a class="reference internal" href="#models.BaseLayers.super_field"><code class="docutils literal notranslate"><span class="pre">BaseLayers.super_field</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#models.load_descriptor"><code class="docutils literal notranslate"><span class="pre">load_descriptor()</span></code></a></li>
+<li><a class="reference internal" href="#models.StandardiseRequest"><code class="docutils literal notranslate"><span class="pre">StandardiseRequest</span></code></a><ul>
+<li><a class="reference internal" href="#models.StandardiseRequest.static_input"><code class="docutils literal notranslate"><span class="pre">StandardiseRequest.static_input</span></code></a></li>
+<li><a class="reference internal" href="#models.StandardiseRequest.annual_input"><code class="docutils literal notranslate"><span class="pre">StandardiseRequest.annual_input</span></code></a></li>
+<li><a class="reference internal" href="#models.StandardiseRequest.sub_annual_input"><code class="docutils literal notranslate"><span class="pre">StandardiseRequest.sub_annual_input</span></code></a></li>
+<li><a class="reference internal" href="#models.StandardiseRequest.output_path"><code class="docutils literal notranslate"><span class="pre">StandardiseRequest.output_path</span></code></a></li>
+<li><a class="reference internal" href="#models.StandardiseRequest.key"><code class="docutils literal notranslate"><span class="pre">StandardiseRequest.key</span></code></a></li>
+<li><a class="reference internal" href="#models.StandardiseRequest.converted_files"><code class="docutils literal notranslate"><span class="pre">StandardiseRequest.converted_files</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
+  </aside>
+  <div class="rside-overlay js-menu" role="button" aria-label="Close Table of Contents" aria-controls="rside" aria-expanded="false"></div>
+  <main class="sy-main w-full max-sm:max-w-full print:pt-6">
+<div class="sy-breadcrumbs" role="navigation">
+  <div class="sy-breadcrumbs-inner flex items-center">
+    <div class="md:hidden mr-3">
+      <button class="js-menu" aria-label="Menu" type="button" aria-controls="lside" aria-expanded="false">
+        <i class="i-lucide menu"></i>
+      </button>
+    </div>
+    <ol class="flex-1" itemscope itemtype="https://schema.org/BreadcrumbList"><li itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+        <a itemprop="item" href="../../index.html"><span itemprop="name">cs-geodata</span></a>
+        <span>/</span>
+        <meta itemprop="position" content="1" />
+      </li><li itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+        <a itemprop="item" href="../index.html"><span itemprop="name">API Reference</span></a>
+        <span>/</span>
+        <meta itemprop="position" content="2" />
+      </li><li itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+        <strong itemprop="name">models</strong>
+        <meta itemprop="position" content="3" />
+      </li></ol>
+    <div class="xl:hidden ml-1">
+      <button class="js-menu" aria-label="Show table of contents" type="button" aria-controls="rside"
+        aria-expanded="false">
+        <i class="i-lucide outdent"></i>
+      </button>
+    </div>
+  </div>
+</div><div class="flex flex-col break-words justify-between">
+      <div class="relative min-w-0 max-w-6xl px-6 pb-6 pt-8 xl:px-12">
+  <article class="yue" role="main">
+          <section id="module-models">
+<span id="models"></span><h1>models<a class="headerlink" href="#module-models" title="Link to this heading">#</a></h1>
+<p>Data models and settings configurations for cs-geodata.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading">#</a></h2>
+<div class="table-wrapper autosummary longtable docutils container">
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#models.S3Path" title="models.S3Path"><code class="xref py py-obj docutils literal notranslate"><span class="pre">S3Path</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#models.LocationField" title="models.LocationField"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LocationField</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading">#</a></h2>
+<div class="table-wrapper autosummary longtable docutils container">
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#models.LayerDescriptor" title="models.LayerDescriptor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LayerDescriptor</span></code></a></p></td>
+<td><p>Represents a single <code class="docutils literal notranslate"><span class="pre">[[layers]]</span></code> entry from a TOML descriptor file.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#models.StaticParquetFileConfig" title="models.StaticParquetFileConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StaticParquetFileConfig</span></code></a></p></td>
+<td><p>Configuration for static Parquet files.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#models.TemporalParquetFileConfig" title="models.TemporalParquetFileConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TemporalParquetFileConfig</span></code></a></p></td>
+<td><p>Configuration for temporal Parquet files (annual or sub-annual).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#models.ConvertedFilesConfig" title="models.ConvertedFilesConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ConvertedFilesConfig</span></code></a></p></td>
+<td><p>Configuration for static, annual, and sub-annual partitioned Parquet files.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#models.LayerConversionRequest" title="models.LayerConversionRequest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LayerConversionRequest</span></code></a></p></td>
+<td><p>Parsed representation of a TOML descriptor file.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#models.ConversionRequest" title="models.ConversionRequest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ConversionRequest</span></code></a></p></td>
+<td><p>API request payload: a URL pointing to a TOML descriptor and an output path.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#models.BaseLayers" title="models.BaseLayers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BaseLayers</span></code></a></p></td>
+<td><p>API request payload for converting and caching a base layer.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#models.StandardiseRequest" title="models.StandardiseRequest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StandardiseRequest</span></code></a></p></td>
+<td><p>API request payload for standardising existing Parquet files.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading">#</a></h2>
+<div class="table-wrapper autosummary longtable docutils container">
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#models.load_descriptor" title="models.load_descriptor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_descriptor</span></code></a>(→ LayerConversionRequest)</p></td>
+<td><p>Fetch and parse a TOML descriptor file into a LayerConversionRequest.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading">#</a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="models.S3Path">
+<span class="sig-prename descclassname"><span class="pre">models.</span></span><span class="sig-name descname"><span class="pre">S3Path</span></span><a class="headerlink" href="#models.S3Path" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="models.LocationField">
+<span class="sig-prename descclassname"><span class="pre">models.</span></span><span class="sig-name descname"><span class="pre">LocationField</span></span><a class="headerlink" href="#models.LocationField" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="models.LayerDescriptor">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">models.</span></span><span class="sig-name descname"><span class="pre">LayerDescriptor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#models.LayerDescriptor" title="Link to this definition">#</a></dt>
+<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">pydantic.BaseModel</span></code></p>
+<p>Represents a single <code class="docutils literal notranslate"><span class="pre">[[layers]]</span></code> entry from a TOML descriptor file.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.LayerDescriptor.name">
+<span class="sig-name descname"><span class="pre">name</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.LayerDescriptor.name" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.LayerDescriptor.type">
+<span class="sig-name descname"><span class="pre">type</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'item'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'collection'</span></span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.LayerDescriptor.type" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.LayerDescriptor.source">
+<span class="sig-name descname"><span class="pre">source</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.LayerDescriptor.source" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.LayerDescriptor.stac_item">
+<span class="sig-name descname"><span class="pre">stac_item</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.LayerDescriptor.stac_item" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.LayerDescriptor.sample_item">
+<span class="sig-name descname"><span class="pre">sample_item</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.LayerDescriptor.sample_item" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.LayerDescriptor.url_template">
+<span class="sig-name descname"><span class="pre">url_template</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.LayerDescriptor.url_template" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.LayerDescriptor.drop">
+<span class="sig-name descname"><span class="pre">drop</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.LayerDescriptor.drop" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.LayerDescriptor.rename">
+<span class="sig-name descname"><span class="pre">rename</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.LayerDescriptor.rename" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.LayerDescriptor.scale">
+<span class="sig-name descname"><span class="pre">scale</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.LayerDescriptor.scale" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="models.StaticParquetFileConfig">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">models.</span></span><span class="sig-name descname"><span class="pre">StaticParquetFileConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#models.StaticParquetFileConfig" title="Link to this definition">#</a></dt>
+<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">pydantic.BaseModel</span></code></p>
+<p>Configuration for static Parquet files.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.StaticParquetFileConfig.partition_by">
+<span class="sig-name descname"><span class="pre">partition_by</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.StaticParquetFileConfig.partition_by" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.StaticParquetFileConfig.row_group_size">
+<span class="sig-name descname"><span class="pre">row_group_size</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.StaticParquetFileConfig.row_group_size" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="models.TemporalParquetFileConfig">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">models.</span></span><span class="sig-name descname"><span class="pre">TemporalParquetFileConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#models.TemporalParquetFileConfig" title="Link to this definition">#</a></dt>
+<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">pydantic.BaseModel</span></code></p>
+<p>Configuration for temporal Parquet files (annual or sub-annual).</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.TemporalParquetFileConfig.partition_by">
+<span class="sig-name descname"><span class="pre">partition_by</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.TemporalParquetFileConfig.partition_by" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.TemporalParquetFileConfig.row_group_size">
+<span class="sig-name descname"><span class="pre">row_group_size</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.TemporalParquetFileConfig.row_group_size" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="models.ConvertedFilesConfig">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">models.</span></span><span class="sig-name descname"><span class="pre">ConvertedFilesConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#models.ConvertedFilesConfig" title="Link to this definition">#</a></dt>
+<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">pydantic.BaseModel</span></code></p>
+<p>Configuration for static, annual, and sub-annual partitioned Parquet files.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.ConvertedFilesConfig.static">
+<span class="sig-name descname"><span class="pre">static</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#models.StaticParquetFileConfig" title="models.StaticParquetFileConfig"><span class="pre">StaticParquetFileConfig</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.ConvertedFilesConfig.static" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.ConvertedFilesConfig.annual">
+<span class="sig-name descname"><span class="pre">annual</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#models.TemporalParquetFileConfig" title="models.TemporalParquetFileConfig"><span class="pre">TemporalParquetFileConfig</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.ConvertedFilesConfig.annual" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.ConvertedFilesConfig.sub_annual">
+<span class="sig-name descname"><span class="pre">sub_annual</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#models.TemporalParquetFileConfig" title="models.TemporalParquetFileConfig"><span class="pre">TemporalParquetFileConfig</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.ConvertedFilesConfig.sub_annual" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="models.LayerConversionRequest">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">models.</span></span><span class="sig-name descname"><span class="pre">LayerConversionRequest</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#models.LayerConversionRequest" title="Link to this definition">#</a></dt>
+<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">pydantic.BaseModel</span></code></p>
+<p>Parsed representation of a TOML descriptor file.</p>
+<p>Loaded from a remote TOML file via <a class="reference internal" href="#models.load_descriptor" title="models.load_descriptor"><code class="xref py py-func docutils literal notranslate"><span class="pre">load_descriptor()</span></code></a> and passed
+through the entire pipeline.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.LayerConversionRequest.entity">
+<span class="sig-name descname"><span class="pre">entity</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.LayerConversionRequest.entity" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.LayerConversionRequest.key">
+<span class="sig-name descname"><span class="pre">key</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.LayerConversionRequest.key" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.LayerConversionRequest.geometry">
+<span class="sig-name descname"><span class="pre">geometry</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.LayerConversionRequest.geometry" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.LayerConversionRequest.base">
+<span class="sig-name descname"><span class="pre">base</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.LayerConversionRequest.base" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.LayerConversionRequest.min_version">
+<span class="sig-name descname"><span class="pre">min_version</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.LayerConversionRequest.min_version" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.LayerConversionRequest.max_version">
+<span class="sig-name descname"><span class="pre">max_version</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.LayerConversionRequest.max_version" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.LayerConversionRequest.layer_version">
+<span class="sig-name descname"><span class="pre">layer_version</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.LayerConversionRequest.layer_version" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.LayerConversionRequest.output_path">
+<span class="sig-name descname"><span class="pre">output_path</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.LayerConversionRequest.output_path" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.LayerConversionRequest.super_layer_source">
+<span class="sig-name descname"><span class="pre">super_layer_source</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.LayerConversionRequest.super_layer_source" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.LayerConversionRequest.super_layer_key">
+<span class="sig-name descname"><span class="pre">super_layer_key</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.LayerConversionRequest.super_layer_key" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.LayerConversionRequest.super_field">
+<span class="sig-name descname"><span class="pre">super_field</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.LayerConversionRequest.super_field" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.LayerConversionRequest.converted_files">
+<span class="sig-name descname"><span class="pre">converted_files</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#models.ConvertedFilesConfig" title="models.ConvertedFilesConfig"><span class="pre">ConvertedFilesConfig</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.LayerConversionRequest.converted_files" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.LayerConversionRequest.add_admin">
+<span class="sig-name descname"><span class="pre">add_admin</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.LayerConversionRequest.add_admin" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.LayerConversionRequest.layers">
+<span class="sig-name descname"><span class="pre">layers</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#models.LayerDescriptor" title="models.LayerDescriptor"><span class="pre">LayerDescriptor</span></a><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.LayerConversionRequest.layers" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="models.LayerConversionRequest.base_layer_descriptor">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">base_layer_descriptor</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#models.LayerDescriptor" title="models.LayerDescriptor"><span class="pre">LayerDescriptor</span></a></span><a class="headerlink" href="#models.LayerConversionRequest.base_layer_descriptor" title="Link to this definition">#</a></dt>
+<dd><p>Return the descriptor for the configured base layer.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="models.LayerConversionRequest.attribute_layers">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">attribute_layers</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#models.LayerDescriptor" title="models.LayerDescriptor"><span class="pre">LayerDescriptor</span></a><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#models.LayerConversionRequest.attribute_layers" title="Link to this definition">#</a></dt>
+<dd><p>Return all non-base WFS collection layers.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="models.ConversionRequest">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">models.</span></span><span class="sig-name descname"><span class="pre">ConversionRequest</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#models.ConversionRequest" title="Link to this definition">#</a></dt>
+<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">pydantic.BaseModel</span></code></p>
+<p>API request payload: a URL pointing to a TOML descriptor and an output path.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.ConversionRequest.descriptor_url">
+<span class="sig-name descname"><span class="pre">descriptor_url</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.ConversionRequest.descriptor_url" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.ConversionRequest.output_path">
+<span class="sig-name descname"><span class="pre">output_path</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.ConversionRequest.output_path" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="models.BaseLayers">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">models.</span></span><span class="sig-name descname"><span class="pre">BaseLayers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#models.BaseLayers" title="Link to this definition">#</a></dt>
+<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">pydantic.BaseModel</span></code></p>
+<p>API request payload for converting and caching a base layer.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.BaseLayers.base_layer_source">
+<span class="sig-name descname"><span class="pre">base_layer_source</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.BaseLayers.base_layer_source" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.BaseLayers.output_path">
+<span class="sig-name descname"><span class="pre">output_path</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.BaseLayers.output_path" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.BaseLayers.super_layer_source">
+<span class="sig-name descname"><span class="pre">super_layer_source</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.BaseLayers.super_layer_source" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.BaseLayers.super_field">
+<span class="sig-name descname"><span class="pre">super_field</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.BaseLayers.super_field" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="models.load_descriptor">
+<span class="sig-prename descclassname"><span class="pre">models.</span></span><span class="sig-name descname"><span class="pre">load_descriptor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">descriptor_url</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#models.LayerConversionRequest" title="models.LayerConversionRequest"><span class="pre">LayerConversionRequest</span></a></span></span><a class="headerlink" href="#models.load_descriptor" title="Link to this definition">#</a></dt>
+<dd><p>Fetch and parse a TOML descriptor file into a LayerConversionRequest.</p>
+<p>Supports S3 URIs (via fsspec/s3fs) and plain HTTP/HTTPS URLs.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>descriptor_url</strong> – URL to the TOML file.</p></li>
+<li><p><strong>output_path</strong> – Runtime output directory injected into the returned request.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A fully-validated LayerConversionRequest.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – If the descriptor cannot be fetched or parsed.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="models.StandardiseRequest">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">models.</span></span><span class="sig-name descname"><span class="pre">StandardiseRequest</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#models.StandardiseRequest" title="Link to this definition">#</a></dt>
+<dd><p>Bases: <code class="xref py py-obj docutils literal notranslate"><span class="pre">pydantic.BaseModel</span></code></p>
+<p>API request payload for standardising existing Parquet files.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.StandardiseRequest.static_input">
+<span class="sig-name descname"><span class="pre">static_input</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.StandardiseRequest.static_input" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.StandardiseRequest.annual_input">
+<span class="sig-name descname"><span class="pre">annual_input</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.StandardiseRequest.annual_input" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.StandardiseRequest.sub_annual_input">
+<span class="sig-name descname"><span class="pre">sub_annual_input</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.StandardiseRequest.sub_annual_input" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.StandardiseRequest.output_path">
+<span class="sig-name descname"><span class="pre">output_path</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.StandardiseRequest.output_path" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.StandardiseRequest.key">
+<span class="sig-name descname"><span class="pre">key</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.StandardiseRequest.key" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="models.StandardiseRequest.converted_files">
+<span class="sig-name descname"><span class="pre">converted_files</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#models.ConvertedFilesConfig" title="models.ConvertedFilesConfig"><span class="pre">ConvertedFilesConfig</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#models.StandardiseRequest.converted_files" title="Link to this definition">#</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+        </article><button class="back-to-top" type="button">
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+    <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+  </svg>
+  <span>Back to top</span>
+</button><div class="navigation flex print:hidden"><div class="navigation-prev">
+    <a href="../checks/index.html">
+      <i class="i-lucide chevron-left"></i>
+      <div class="page-info">
+        <span>Previous</span><div class="title">checks</div></div>
+    </a>
+  </div><div class="navigation-next">
+    <a href="../geojoin/index.html">
+      <div class="page-info">
+        <span>Next</span>
+        <div class="title">geojoin</div>
+      </div>
+      <i class="i-lucide chevron-right"></i>
+    </a>
+  </div></div></div>
+    </div>
+  </main>
+</div>
+<footer class="sy-foot">
+  <div class="sy-foot-inner sy-container mx-auto">
+    <div class="sy-foot-reserved md:flex justify-between items-center">
+      <div class="sy-foot-copyright"><p>2026, Apoorva Kashyap</p>
+  
+  <p>
+    Made with
+    
+    <a href="https://www.sphinx-doc.org/">Sphinx</a> and
+    
+    <a href="https://shibuya.lepture.com">Shibuya theme</a>.
+  </p>
+</div>
+      <div class="sy-foot-socials"></div>
+    </div>
+  </div>
+</footer>
+      <script src="../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../../_static/copybutton.js?v=f281be69"></script>
+      <script src="../../_static/shibuya.js?v=50760d75"></script></body>
+</html>

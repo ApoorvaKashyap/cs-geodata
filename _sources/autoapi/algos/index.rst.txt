@@ -1,0 +1,79 @@
+algos
+=====
+
+.. py:module:: algos
+
+.. autoapi-nested-parse::
+
+   Core conversion algorithms and Parquet generation pipelines.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   algos.COMMON_COLS
+   algos.request
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   algos.run_pipeline
+   algos.run_standardise
+
+
+Module Contents
+---------------
+
+.. py:data:: COMMON_COLS
+   :value: ['mws_id', 'geometry', 'tehsil', 'district', 'state', 'area_in_ha']
+
+
+.. py:function:: run_pipeline(request: src.app.models.LayerConversionRequest) -> None
+   :async:
+
+
+   Run the main data pipeline to merge attribute layers onto a base entity dataset.
+
+   This function fetches tehsils filtered by the requested version range,
+   downloads the base layer, processes requested additional layers, merges
+   them, fills missing admin boundaries, and then splits the final dataset
+   into three flat Parquet files:
+
+   * ``static.parquet``   — geometry + identity + non-temporal attributes
+   * ``sub-annual/``      — melted long, one row per (entity_key, date), partitioned by year
+   * ``annual/``          — melted long, one row per (entity_key, year), partitioned by year
+
+   .. note::
+       If partition columns are specified in the `converted_files` config, rows with null values
+       in any of those columns will be dropped. Please check the logs if expected data is missing
+       (this usually implies geometries fall out of the coverage area).
+
+   :param request: Configuration for the pipeline run, including layers, paths,
+                   version bounds, and column mappings.
+   :type request: LayerConversionRequest
+
+
+.. py:function:: run_standardise(request: src.app.models.StandardiseRequest) -> None
+   :async:
+
+
+   Standardise pre-existing parquets directly without download/join steps.
+
+   :param request: The StandardiseRequest payload.
+
+   Applies cs-geodata schema conventions:
+   - GeoParquet v1.1.0 metadata + bbox
+   - Bloom filters on string ID columns
+   - Hive partitioning
+   - Hilbert sorting via a static geometry index mapping
+
+
+
+.. py:data:: request
+

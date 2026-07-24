@@ -1,0 +1,104 @@
+api
+===
+
+.. py:module:: api
+
+.. autoapi-nested-parse::
+
+   API helpers for asynchronous data conversion.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   api.get_active
+   api.download_and_convert_geojson
+   api.convert_base
+
+
+Module Contents
+---------------
+
+.. py:function:: get_active() -> polars.DataFrame
+   :async:
+
+
+   Fetch the list of active locations from the CoreStack API.
+
+   .. warning::
+       This function is currently unused. Active locations are now fetched via
+       S3 version manifests instead of the CoREStack API.
+
+   :returns: A polars DataFrame containing the active locations JSON response.
+   :rtype: pl.DataFrame
+
+
+.. py:function:: download_and_convert_geojson(layer: str, district: str, tehsil: str, state_name: str, district_name: str, tehsil_name: str, url_template: str, cols_rename: dict[str, str], cols_drop: list[str], scale: dict[str, float], row_group_size: int = 22000) -> int
+
+   Download a GeoJSON from GeoServer, clean it, and persist as Parquet.
+
+   Combines the former download-only step with the per-tehsil column cleaning
+   and admin-boundary tagging that was previously performed on the main thread
+   inside ``merge_tehsils_on_layer``. Running this inside an RQ worker frees
+   the pipeline orchestrator from the CPU-heavy GDAL GeoJSON parse.
+
+   The output Parquet file is written to
+   ``{settings.temp_path}/{layer}_{district}_{tehsil}.parquet``.
+
+   :param layer: Layer name (used for the output filename).
+   :type layer: str
+   :param district: Slug-form district name used to build the GeoServer URL.
+   :type district: str
+   :param tehsil: Slug-form tehsil name used to build the GeoServer URL.
+   :type tehsil: str
+   :param state_name: Human-readable state label to tag each row.
+   :type state_name: str
+   :param district_name: Human-readable district label to tag each row.
+   :type district_name: str
+   :param tehsil_name: Human-readable tehsil label to tag each row.
+   :type tehsil_name: str
+   :param url_template: WFS URL template with {district} and {tehsil} placeholders.
+   :type url_template: str
+   :param cols_rename: Column rename mapping to apply after reading the file.
+   :type cols_rename: dict[str, str]
+   :param cols_drop: Column names to drop after reading the file.
+   :type cols_drop: list[str]
+   :param scale: Scaling factor mapping to apply after reading the file.
+   :type scale: dict[str, float]
+   :param row_group_size: Row group size for output Parquet file.
+   :type row_group_size: int
+
+   :returns: 0 on success, -1 on failure.
+   :rtype: int
+
+
+.. py:function:: convert_base(input_path: str, output_path: str, chunk_size: int = 500000, super_layer_source: str | None = None, super_field: str | None = None, row_group_size: int = 22000) -> bool
+   :async:
+
+
+   Asynchronously convert a base layer to Parquet format, sorted by Hilbert curve.
+
+   If *super_layer_source* and *super_field* are provided, each base entity is also
+   assigned its containing super-layer region (e.g. sub-basin) via a
+   centroid-in-polygon spatial join, enabling downstream Hive partitioning.
+
+   :param input_path: Path or URI of the input file (local, ``s3://``, HTTPS).
+   :type input_path: str
+   :param output_path: Destination path for the converted Parquet file.
+   :type output_path: str
+   :param chunk_size: Unused; kept for API compatibility.
+   :type chunk_size: int
+   :param super_layer_source: Optional path/URI to the super-layer boundary file.
+   :type super_layer_source: str | None
+   :param super_field: Column name in the super-layer file to copy onto each row.
+   :type super_field: str | None
+   :param row_group_size: Target row group size for the output Parquet file.
+   :type row_group_size: int
+
+   :returns: True if conversion succeeded, False otherwise.
+   :rtype: bool
+
+

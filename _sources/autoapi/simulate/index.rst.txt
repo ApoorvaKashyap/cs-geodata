@@ -1,0 +1,27 @@
+simulate
+========
+
+.. py:module:: simulate
+
+.. autoapi-nested-parse::
+
+   Dummy worker script to simulate workload and delay.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   simulate.sim_work
+
+
+Module Contents
+---------------
+
+.. py:function:: sim_work() -> None
+
+   Simulate a long-running task by sleeping for a random duration.
+
+

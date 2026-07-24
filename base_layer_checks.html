@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en" data-accent-color="violet" data-content_root="./">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Base Layer Pipeline - cs-geodata documentation</title><link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="next" title="Data Checks and Cleaning" href="data_checks.html" /><link rel="prev" title="Data Flow" href="data_flow.html" /><script>
+    function setColorMode(t){let e=document.documentElement;e.setAttribute("data-color-mode",t);let a=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches,s=t;"auto"===t&&(s=a?"dark":"light"),"light"===s?(e.classList.remove("dark"),e.classList.add("light")):(e.classList.remove("light"),e.classList.add("dark"))}
+    setColorMode(localStorage._theme||"auto");
+  </script><link rel="stylesheet" type="text/css" href="_static/pygments.css?v=e1a1ceaf" />
+    <link rel="stylesheet" type="text/css" href="_static/shibuya.css?v=2ceb65ce" />
+    <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
+    <link media="print" rel="stylesheet" type="text/css" href="_static/print.css?v=20ff2c19" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --sy-f-text: "Inter", var(--sy-f-sys), var(--sy-f-cjk), sans-serif;
+  --sy-f-heading: "Inter", var(--sy-f-sys), var(--sy-f-cjk), sans-serif;
+}
+</style>
+    
+  <meta property="og:type" content="website"/><meta property="og:title" content="Base Layer Pipeline"/>
+    <meta name="twitter:card" content="summary"/>
+  </head>
+<body><div class="sy-head">
+  <div class="sy-head-blur"></div>
+  <div class="sy-head-inner sy-container mx-auto">
+    <a class="sy-head-brand" href="index.html">
+      
+      
+      <strong>cs-geodata</strong>
+    </a>
+    <div class="sy-head-nav" id="head-nav">
+      <nav class="sy-head-links"></nav>
+      <div class="sy-head-extra flex items-center print:hidden"><form class="searchbox flex items-center" action="search.html" method="get">
+  <input type="text" name="q" placeholder="Search" />
+  <kbd>/</kbd>
+</form><div class="sy-head-socials"></div></div>
+    </div>
+    <div class="sy-head-actions flex items-center shrink-0 print:hidden"><button class="js-theme theme-switch flex items-center"
+data-aria-auto="Switch to light color mode"
+data-aria-light="Switch to dark color mode"
+data-aria-dark="Switch to auto color mode">
+<i class="i-lucide theme-icon"></i>
+</button><button class="md:hidden flex items-center js-menu" aria-label="Menu" type="button" aria-controls="head-nav" aria-expanded="false">
+        <div class="hamburger">
+          <span class="hamburger_1"></span>
+          <span class="hamburger_2"></span>
+          <span class="hamburger_3"></span>
+        </div>
+      </button>
+    </div>
+  </div>
+</div>
+<div class="sy-page sy-container flex mx-auto">
+  <aside id="lside" class="sy-lside md:w-72 md:shrink-0 print:hidden">
+    <div class="sy-lside-inner md:sticky">
+      <div class="sy-scrollbar p-6">
+        <div class="globaltoc" data-expand-depth="0"><p class="caption" role="heading" aria-level="3"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="settings.html">Configuration &amp; Settings</a></li>
+<li class="toctree-l1"><a class="reference internal" href="descriptor.html">Descriptor TOML Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="data_flow.html">Data Flow</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Base Layer Pipeline</a></li>
+<li class="toctree-l1"><a class="reference internal" href="data_checks.html">Data Checks and Cleaning</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">FastAPI Endpoints</a></li>
+<li class="toctree-l1"><a class="reference internal" href="autoapi/index.html">API Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="autoapi/api/index.html">api</a></li>
+<li class="toctree-l2"><a class="reference internal" href="autoapi/algos/index.html">algos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="autoapi/merge/index.html">merge</a></li>
+<li class="toctree-l2"><a class="reference internal" href="autoapi/layers/index.html">layers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="autoapi/checks/index.html">checks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="autoapi/models/index.html">models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="autoapi/geojoin/index.html">geojoin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="autoapi/configs/index.html">configs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="autoapi/geojson/index.html">geojson</a></li>
+<li class="toctree-l2"><a class="reference internal" href="autoapi/cleaners/index.html">cleaners</a></li>
+<li class="toctree-l2"><a class="reference internal" href="autoapi/simulate/index.html">simulate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="autoapi/scheduler/index.html">scheduler</a></li>
+<li class="toctree-l2"><a class="reference internal" href="autoapi/work_queue/index.html">work_queue</a></li>
+<li class="toctree-l2"><a class="reference internal" href="autoapi/geoparquet/index.html">geoparquet</a></li>
+<li class="toctree-l2"><a class="reference internal" href="autoapi/duckdb_funcs/index.html">duckdb_funcs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="autoapi/redis_client/index.html">redis_client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="autoapi/polars_utils/index.html">polars_utils</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </div>
+  </aside>
+  <div class="lside-overlay js-menu" role="button" aria-label="Close left sidebar" aria-controls="lside" aria-expanded="false"></div>
+  <aside id="rside" class="sy-rside pb-3 w-64 shrink-0 order-last">
+    <button class="rside-close js-menu xl:hidden" aria-label="Close Table of Contents" type="button" aria-controls="rside" aria-expanded="false">
+      <i class="i-lucide close"></i>
+    </button>
+    <div class="sy-scrollbar sy-rside-inner px-6 xl:top-16 xl:sticky xl:pl-0 pt-6 pb-4"><div class="localtoc"><h3>On this page</h3><ul>
+<li><a class="reference internal" href="#format-standardization">1. Format Standardization</a></li>
+<li><a class="reference internal" href="#spatial-sorting-hilbert-curve">2. Spatial Sorting (Hilbert Curve)</a></li>
+<li><a class="reference internal" href="#super-layer-spatial-join-enrichment">3. Super-Layer Spatial Join (Enrichment)</a></li>
+<li><a class="reference internal" href="#optimized-export">4. Optimized Export</a></li>
+</ul>
+</div><div id="ethical-ad-placement" data-ea-publisher="readthedocs"></div></div>
+  </aside>
+  <div class="rside-overlay js-menu" role="button" aria-label="Close Table of Contents" aria-controls="rside" aria-expanded="false"></div>
+  <main class="sy-main w-full max-sm:max-w-full print:pt-6">
+<div class="sy-breadcrumbs" role="navigation">
+  <div class="sy-breadcrumbs-inner flex items-center">
+    <div class="md:hidden mr-3">
+      <button class="js-menu" aria-label="Menu" type="button" aria-controls="lside" aria-expanded="false">
+        <i class="i-lucide menu"></i>
+      </button>
+    </div>
+    <ol class="flex-1" itemscope itemtype="https://schema.org/BreadcrumbList"><li itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+        <a itemprop="item" href="index.html"><span itemprop="name">cs-geodata</span></a>
+        <span>/</span>
+        <meta itemprop="position" content="1" />
+      </li><li itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+        <strong itemprop="name">Base Layer Pipeline</strong>
+        <meta itemprop="position" content="2" />
+      </li></ol>
+    <div class="xl:hidden ml-1">
+      <button class="js-menu" aria-label="Show table of contents" type="button" aria-controls="rside"
+        aria-expanded="false">
+        <i class="i-lucide outdent"></i>
+      </button>
+    </div>
+  </div>
+</div><div class="flex flex-col break-words justify-between">
+      <div class="relative min-w-0 max-w-6xl px-6 pb-6 pt-8 xl:px-12">
+  <article class="yue" role="main">
+          <section id="base-layer-pipeline">
+<h1>Base Layer Pipeline<a class="headerlink" href="#base-layer-pipeline" title="Link to this heading">#</a></h1>
+<p>Before attribute layers can be processed and joined, the system needs a structured, optimized <strong>Base Layer</strong> (the core geographic entities like microwatersheds, villages, or tehsils).</p>
+<p>The Base Layer pipeline (triggered via <code class="docutils literal notranslate"><span class="pre">/api/v1/vector/create_base_cache</span></code>) runs several specific spatial transformations and checks to ensure the base data is highly optimized for downstream queries and joins.</p>
+<section id="format-standardization">
+<h2>1. Format Standardization<a class="headerlink" href="#format-standardization" title="Link to this heading">#</a></h2>
+<p>Raw geographic data (which can be GeoJSON, Shapefile, etc., from local storage or S3) is ingested and standardized.</p>
+<ul class="simple">
+<li><p><strong>Process</strong>: The data is read using DuckDB’s spatial extension (<code class="docutils literal notranslate"><span class="pre">ST_Read</span></code>). Geometries are explicitly cast to Well-Known Binary (WKB) format to ensure compatibility with downstream tools like Polars.</p></li>
+</ul>
+</section>
+<section id="spatial-sorting-hilbert-curve">
+<h2>2. Spatial Sorting (Hilbert Curve)<a class="headerlink" href="#spatial-sorting-hilbert-curve" title="Link to this heading">#</a></h2>
+<p>To drastically improve spatial query performance and file compression, the base layer undergoes spatial sorting.</p>
+<ul class="simple">
+<li><p><strong>Process</strong>: The system applies an <code class="docutils literal notranslate"><span class="pre">ORDER</span> <span class="pre">BY</span> <span class="pre">ST_Hilbert(geom)</span></code> operation.</p></li>
+<li><p><strong>Why</strong>: A Hilbert curve is a continuous fractal space-filling curve. Sorting geographic data along this curve ensures that features physically close to each other on the Earth are also stored close to each other on disk. This maximizes the efficiency of Parquet row-groups during spatial bounding-box queries.</p></li>
+</ul>
+</section>
+<section id="super-layer-spatial-join-enrichment">
+<h2>3. Super-Layer Spatial Join (Enrichment)<a class="headerlink" href="#super-layer-spatial-join-enrichment" title="Link to this heading">#</a></h2>
+<p>Often, a base entity (like a microwatershed) needs to be tagged with the region it belongs to (like a river basin) for partitioning purposes.</p>
+<ul class="simple">
+<li><p><strong>Process</strong>: If a <code class="docutils literal notranslate"><span class="pre">super_layer_source</span></code> (e.g., basin boundaries) and a <code class="docutils literal notranslate"><span class="pre">super_field</span></code> (e.g., basin name) are provided, the system performs a <strong>centroid-in-polygon spatial join</strong>.</p></li>
+<li><p><strong>Logic</strong>: <code class="docutils literal notranslate"><span class="pre">ST_Within(ST_Centroid(base_geometry),</span> <span class="pre">super_geometry)</span></code>.</p></li>
+<li><p>This efficiently assigns the corresponding super-layer attribute to every base entity without complex intersection math.</p></li>
+</ul>
+</section>
+<section id="optimized-export">
+<h2>4. Optimized Export<a class="headerlink" href="#optimized-export" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><strong>Process</strong>: The sorted and enriched base layer is exported directly to a Parquet file with <code class="docutils literal notranslate"><span class="pre">ZSTD</span></code> compression. This final Parquet file acts as the primary geographic index for all subsequent attribute layer processing (the main vector conversion pipeline).</p></li>
+</ul>
+</section>
+</section>
+
+        </article><button class="back-to-top" type="button">
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+    <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+  </svg>
+  <span>Back to top</span>
+</button><div class="navigation flex print:hidden"><div class="navigation-prev">
+    <a href="data_flow.html">
+      <i class="i-lucide chevron-left"></i>
+      <div class="page-info">
+        <span>Previous</span><div class="title">Data Flow</div></div>
+    </a>
+  </div><div class="navigation-next">
+    <a href="data_checks.html">
+      <div class="page-info">
+        <span>Next</span>
+        <div class="title">Data Checks and Cleaning</div>
+      </div>
+      <i class="i-lucide chevron-right"></i>
+    </a>
+  </div></div></div>
+    </div>
+  </main>
+</div>
+<footer class="sy-foot">
+  <div class="sy-foot-inner sy-container mx-auto">
+    <div class="sy-foot-reserved md:flex justify-between items-center">
+      <div class="sy-foot-copyright"><p>2026, Apoorva Kashyap</p>
+  
+  <p>
+    Made with
+    
+    <a href="https://www.sphinx-doc.org/">Sphinx</a> and
+    
+    <a href="https://shibuya.lepture.com">Shibuya theme</a>.
+  </p>
+</div>
+      <div class="sy-foot-socials"></div>
+    </div>
+  </div>
+</footer>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="_static/copybutton.js?v=f281be69"></script>
+      <script src="_static/shibuya.js?v=50760d75"></script></body>
+</html>
