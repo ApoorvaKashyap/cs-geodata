@@ -1,0 +1,49 @@
+duckdb_funcs
+============
+
+.. py:module:: duckdb_funcs
+
+.. autoapi-nested-parse::
+
+   DuckDB connection and extension initialization utilities.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   duckdb_funcs.init_duckdb
+   duckdb_funcs.get_duckdb_geom_expr
+
+
+Module Contents
+---------------
+
+.. py:function:: init_duckdb() -> duckdb.DuckDBPyConnection
+
+   Initialize a DuckDB connection with required extensions and settings.
+
+   Sets up a temporary DuckDB database file, loads spatial and S3 extensions,
+   and configures AWS credentials using the default credential chain.
+
+   :returns: An active DuckDB connection object.
+
+   :raises RuntimeError: If DuckDB initialization fails.
+
+
+.. py:function:: get_duckdb_geom_expr(conn: duckdb.DuckDBPyConnection, table_or_view: str = 'merged') -> str
+
+   Return SQL expression to access geometry as a DuckDB GEOMETRY.
+
+   If the geometry column is already typed as GEOMETRY (e.g. from GeoParquet),
+   returns 'geometry'. If it is a binary WKB blob, returns 'ST_GeomFromWKB(geometry)'.
+
+   :param conn: Active DuckDB connection.
+   :param table_or_view: Table or view name to inspect. Defaults to "merged".
+   :type table_or_view: str
+
+   :returns: SQL expression string to reference geometry as a GEOMETRY object.
+
+

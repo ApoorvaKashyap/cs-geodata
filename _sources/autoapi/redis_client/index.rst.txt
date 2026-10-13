@@ -1,0 +1,42 @@
+redis_client
+============
+
+.. py:module:: redis_client
+
+.. autoapi-nested-parse::
+
+   Shared Redis client factory.
+
+   A single :func:`get_redis_client` call is the canonical way to obtain a
+   ``Redis`` connection anywhere in the project.  All callers share the same
+   configuration source (:mod:`src.utils.configs`) so the host/port only ever
+   needs to change in one place (``.env`` or environment variables).
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   redis_client.get_redis_client
+
+
+Module Contents
+---------------
+
+.. py:function:: get_redis_client() -> redis.Redis
+
+   Return the process-wide Redis client, creating it on first call.
+
+   The client is lazily initialised and cached for the lifetime of the
+   process.  It reads ``redis_host`` and ``redis_port`` from
+   :data:`~src.utils.configs.settings` (populated from ``.env`` or
+   real environment variables).
+
+   :returns: A connected :class:`redis.Redis` instance.
+
+   :raises redis.exceptions.ConnectionError: If the Redis server cannot be
+       reached on the first ping.
+
+

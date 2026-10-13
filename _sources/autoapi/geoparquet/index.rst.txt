@@ -1,0 +1,43 @@
+geoparquet
+==========
+
+.. py:module:: geoparquet
+
+.. autoapi-nested-parse::
+
+   FastAPI router for GeoParquet standardisation requests.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   geoparquet.router
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   geoparquet.create_standardise
+
+
+Module Contents
+---------------
+
+.. py:data:: router
+
+.. py:function:: create_standardise(request: src.app.models.StandardiseRequest) -> dict[str, str]
+   :async:
+
+
+   Handle standardise requests.
+
+   :param request: The API request payload.
+
+   :returns: A dictionary containing the task ID and status.
+
+

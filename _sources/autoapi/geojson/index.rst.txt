@@ -1,0 +1,55 @@
+geojson
+=======
+
+.. py:module:: geojson
+
+.. autoapi-nested-parse::
+
+   FastAPI router for GeoJSON layer conversion requests.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   geojson.router
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   geojson.create_layer
+   geojson.create_base_cache
+
+
+Module Contents
+---------------
+
+.. py:data:: router
+
+.. py:function:: create_layer(request: src.app.models.ConversionRequest) -> dict[str, str]
+   :async:
+
+
+   Handle layer conversion requests.
+
+   :param request: The API request payload.
+
+   :returns: A dictionary containing the task ID and status.
+
+
+.. py:function:: create_base_cache(request: src.app.models.BaseLayers) -> dict[str, str]
+   :async:
+
+
+   Handle base layer caching requests.
+
+   :param request: The API request payload.
+
+   :returns: A dictionary containing the task ID and status.
+
+

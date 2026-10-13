@@ -1,0 +1,397 @@
+models
+======
+
+.. py:module:: models
+
+.. autoapi-nested-parse::
+
+   Data models and settings configurations for cs-geodata.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   models.S3Path
+   models.LocationField
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   models.LayerDescriptor
+   models.StaticParquetFileConfig
+   models.TemporalParquetFileConfig
+   models.ConvertedFilesConfig
+   models.LayerConversionRequest
+   models.ConversionRequest
+   models.BaseLayers
+   models.StandardiseRequest
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   models.load_descriptor
+
+
+Module Contents
+---------------
+
+.. py:data:: S3Path
+
+.. py:data:: LocationField
+
+.. py:class:: LayerDescriptor(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Represents a single ``[[layers]]`` entry from a TOML descriptor file.
+
+
+   .. py:attribute:: name
+      :type:  str
+      :value: None
+
+
+
+   .. py:attribute:: type
+      :type:  Literal['item', 'collection']
+      :value: None
+
+
+
+   .. py:attribute:: source
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: stac_item
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: sample_item
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: url_template
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: drop
+      :type:  list[str]
+      :value: None
+
+
+
+   .. py:attribute:: rename
+      :type:  dict[str, str]
+      :value: None
+
+
+
+   .. py:attribute:: scale
+      :type:  dict[str, float]
+      :value: None
+
+
+
+.. py:class:: StaticParquetFileConfig(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Configuration for static Parquet files.
+
+
+   .. py:attribute:: partition_by
+      :type:  list[str] | None
+      :value: None
+
+
+
+   .. py:attribute:: row_group_size
+      :type:  int
+      :value: None
+
+
+
+.. py:class:: TemporalParquetFileConfig(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Configuration for temporal Parquet files (annual or sub-annual).
+
+
+   .. py:attribute:: partition_by
+      :type:  list[str] | None
+      :value: None
+
+
+
+   .. py:attribute:: row_group_size
+      :type:  int
+      :value: None
+
+
+
+.. py:class:: ConvertedFilesConfig(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Configuration for static, annual, and sub-annual partitioned Parquet files.
+
+
+   .. py:attribute:: static
+      :type:  StaticParquetFileConfig | None
+      :value: None
+
+
+
+   .. py:attribute:: annual
+      :type:  TemporalParquetFileConfig | None
+      :value: None
+
+
+
+   .. py:attribute:: sub_annual
+      :type:  TemporalParquetFileConfig | None
+      :value: None
+
+
+
+.. py:class:: LayerConversionRequest(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   Parsed representation of a TOML descriptor file.
+
+   Loaded from a remote TOML file via :func:`load_descriptor` and passed
+   through the entire pipeline.
+
+
+   .. py:attribute:: entity
+      :type:  str
+      :value: None
+
+
+
+   .. py:attribute:: key
+      :type:  str
+      :value: None
+
+
+
+   .. py:attribute:: geometry
+      :type:  str
+      :value: None
+
+
+
+   .. py:attribute:: base
+      :type:  str
+      :value: None
+
+
+
+   .. py:attribute:: min_version
+      :type:  float
+      :value: None
+
+
+
+   .. py:attribute:: max_version
+      :type:  float
+      :value: None
+
+
+
+   .. py:attribute:: layer_version
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: output_path
+      :type:  str
+      :value: None
+
+
+
+   .. py:attribute:: super_layer_source
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: super_layer_key
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: super_field
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: converted_files
+      :type:  ConvertedFilesConfig | None
+      :value: None
+
+
+
+   .. py:attribute:: add_admin
+      :type:  bool
+      :value: None
+
+
+
+   .. py:attribute:: layers
+      :type:  list[LayerDescriptor]
+      :value: None
+
+
+
+   .. py:property:: base_layer_descriptor
+      :type: LayerDescriptor
+
+
+      Return the descriptor for the configured base layer.
+
+
+   .. py:property:: attribute_layers
+      :type: list[LayerDescriptor]
+
+
+      Return all non-base WFS collection layers.
+
+
+.. py:class:: ConversionRequest(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   API request payload: a URL pointing to a TOML descriptor and an output path.
+
+
+   .. py:attribute:: descriptor_url
+      :type:  str
+      :value: None
+
+
+
+   .. py:attribute:: output_path
+      :type:  str
+      :value: None
+
+
+
+.. py:class:: BaseLayers(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   API request payload for converting and caching a base layer.
+
+
+   .. py:attribute:: base_layer_source
+      :type:  str
+      :value: None
+
+
+
+   .. py:attribute:: output_path
+      :type:  str
+      :value: None
+
+
+
+   .. py:attribute:: super_layer_source
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: super_field
+      :type:  str | None
+      :value: None
+
+
+
+.. py:function:: load_descriptor(descriptor_url: str, output_path: str) -> LayerConversionRequest
+
+   Fetch and parse a TOML descriptor file into a LayerConversionRequest.
+
+   Supports S3 URIs (via fsspec/s3fs) and plain HTTP/HTTPS URLs.
+
+   :param descriptor_url: URL to the TOML file.
+   :param output_path: Runtime output directory injected into the returned request.
+
+   :returns: A fully-validated LayerConversionRequest.
+
+   :raises ValueError: If the descriptor cannot be fetched or parsed.
+
+
+.. py:class:: StandardiseRequest(/, **data: Any)
+
+   Bases: :py:obj:`pydantic.BaseModel`
+
+
+   API request payload for standardising existing Parquet files.
+
+
+   .. py:attribute:: static_input
+      :type:  str
+      :value: None
+
+
+
+   .. py:attribute:: annual_input
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: sub_annual_input
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: output_path
+      :type:  str
+      :value: None
+
+
+
+   .. py:attribute:: key
+      :type:  str | None
+      :value: None
+
+
+
+   .. py:attribute:: converted_files
+      :type:  ConvertedFilesConfig | None
+      :value: None
+
+
+

@@ -1,0 +1,33 @@
+work_queue
+==========
+
+.. py:module:: work_queue
+
+.. autoapi-nested-parse::
+
+   Redis Queue (RQ) configuration and job fetch helpers.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   work_queue.get_status
+
+
+Module Contents
+---------------
+
+.. py:function:: get_status(task_id: str) -> dict[str, str]
+   :async:
+
+
+   Retrieve the status of a specific RQ task.
+
+   :param task_id: The unique identifier of the task.
+
+   :returns: A dictionary containing the task ID and its current status.
+
+

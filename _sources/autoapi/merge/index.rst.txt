@@ -1,0 +1,54 @@
+merge
+=====
+
+.. py:module:: merge
+
+.. autoapi-nested-parse::
+
+   Algorithms for merging base and attribute layers.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   merge.DROP_BEFORE_JOIN
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   merge.merge_all_layers
+
+
+Module Contents
+---------------
+
+.. py:data:: DROP_BEFORE_JOIN
+   :value: ['id', 'tehsil', 'district', 'state', 'geometry']
+
+
+.. py:function:: merge_all_layers(layer_results: dict[str, polars.LazyFrame], base: polars.LazyFrame, entity_key: str = 'mws_id') -> polars.LazyFrame
+
+   Merge all processed layer dataframes onto the base dataset.
+
+   Base must arrive already renamed (uid->entity_key, geom->geometry)
+   and versioned. This is the caller's responsibility.
+
+   :param layer_results: Dictionary of layer names mapped to their LazyFrames.
+   :type layer_results: dict[str, pl.LazyFrame]
+   :param base: The base entity LazyFrame.
+   :type base: pl.LazyFrame
+   :param entity_key: The join key column name shared across all layers (default: 'mws_id').
+   :type entity_key: str
+
+   :returns: The fully merged LazyFrame containing all layers joined on entity_key.
+   :rtype: pl.LazyFrame
+
+   :raises ValueError: If the base layer is missing expected columns.
+
+

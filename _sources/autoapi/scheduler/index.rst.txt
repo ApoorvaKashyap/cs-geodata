@@ -1,0 +1,47 @@
+scheduler
+=========
+
+.. py:module:: scheduler
+
+.. autoapi-nested-parse::
+
+   Job scheduling and execution monitoring helpers.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   scheduler.get_all_geojsons
+   scheduler.poll_completion
+
+
+Module Contents
+---------------
+
+.. py:function:: get_all_geojsons(attribute_layers: list[src.app.models.LayerDescriptor], tehsils: polars.LazyFrame) -> dict
+   :async:
+
+
+   Queue download-and-convert tasks for all WFS collection layers.
+
+   :param attribute_layers: List of non-base LayerDescriptors (type='collection').
+   :param tehsils: The filtered active tehsils to process.
+
+   :returns: A dictionary mapping layer names to their corresponding tehsil task maps.
+
+
+.. py:function:: poll_completion(layers: dict[str, dict[str, rq.job.Job]]) -> bool
+   :async:
+
+
+   Check if all queued tasks for the given layers have completed.
+
+   :param layers: Dictionary mapping layer names to their task maps.
+
+   :returns: True if all tasks have finished or failed, False if any are still
+             pending or in progress.
+
+

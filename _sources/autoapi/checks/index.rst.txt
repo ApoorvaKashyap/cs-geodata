@@ -1,0 +1,47 @@
+checks
+======
+
+.. py:module:: checks
+
+.. autoapi-nested-parse::
+
+   Health check API endpoints and diagnostics.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   checks.client
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   checks.check_redis_connection
+   checks.check_worker_status
+
+
+Module Contents
+---------------
+
+.. py:data:: client
+
+.. py:function:: check_redis_connection() -> collections.abc.Awaitable[bool] | bool
+
+   Check if the Redis connection is alive.
+
+   :returns: True if the connection is active, False otherwise.
+
+
+.. py:function:: check_worker_status() -> dict
+
+   Check the status of all active RQ workers.
+
+   :returns: A dictionary containing worker metrics.
+
+
