@@ -25,7 +25,7 @@ from src.conversion.helpers.cleaners import (
     split_cols,
     unnest_json_cols,
 )
-from src.conversion.helpers.duckdb_funcs import init_duckdb
+from src.conversion.helpers.duckdb_funcs import get_duckdb_geom_expr, init_duckdb
 from src.conversion.helpers.geojoin import fill_missing_admin_boundaries
 from src.conversion.helpers.merge import (
     _get_missing_entity_ids,
@@ -606,16 +606,18 @@ async def _write_static_geoparquet_duckdb(
     partition_by_clause = f"PARTITION_BY ({partition_str})" if partition_str else ""
     order_clause = f"ORDER BY {partition_str}" if partition_str else ""
 
+    geom_expr = get_duckdb_geom_expr(conn, "merged")
+
     sql = f"""
         COPY (
             SELECT
                 {col_select.rstrip(", ")},
-                ST_SetCRS(ST_GeomFromWKB(geometry), 'EPSG:4326') AS geometry,
+                ST_SetCRS({geom_expr}, 'EPSG:4326') AS geometry,
                 struct_pack(
-                    xmin := ST_XMin(ST_GeomFromWKB(geometry)),
-                    ymin := ST_YMin(ST_GeomFromWKB(geometry)),
-                    xmax := ST_XMax(ST_GeomFromWKB(geometry)),
-                    ymax := ST_YMax(ST_GeomFromWKB(geometry))
+                    xmin := ST_XMin({geom_expr}),
+                    ymin := ST_YMin({geom_expr}),
+                    xmax := ST_XMax({geom_expr}),
+                    ymax := ST_YMax({geom_expr})
                 ) AS bbox
             FROM merged
             {order_clause}
@@ -1291,6 +1293,7 @@ async def run_standardise(request: StandardiseRequest) -> None:
         conn.execute(
             f"CREATE VIEW merged AS SELECT * FROM read_parquet('{request.static_input}')"
         )
+        geom_expr = get_duckdb_geom_expr(conn, "merged")
 
         # Export h_index for temporal sorting
         h_index_path = f"{tmpdir}/h_index.parquet"
@@ -1305,7 +1308,7 @@ async def run_standardise(request: StandardiseRequest) -> None:
                 COPY (
                     SELECT
                         "{request.key}",
-                        row_number() OVER (ORDER BY ST_Hilbert(ST_GeomFromWKB(geometry))) as h_index
+                        row_number() OVER (ORDER BY ST_Hilbert({geom_expr})) as h_index
                     FROM merged
                 ) TO '{h_index_path}' (FORMAT 'PARQUET', COMPRESSION 'ZSTD')
             """)
@@ -1320,11 +1323,9 @@ async def run_standardise(request: StandardiseRequest) -> None:
         partition_by_clause = f"PARTITION_BY ({partition_str})" if partition_str else ""
 
         if partition_str:
-            order_clause = (
-                f"ORDER BY {partition_str}, ST_Hilbert(ST_GeomFromWKB(geometry))"
-            )
+            order_clause = f"ORDER BY {partition_str}, ST_Hilbert({geom_expr})"
         else:
-            order_clause = "ORDER BY ST_Hilbert(ST_GeomFromWKB(geometry))"
+            order_clause = f"ORDER BY ST_Hilbert({geom_expr})"
 
         col_select = ", ".join(
             f'"{c}"' for c in schema if c != "geometry" and c != "bbox"
@@ -1335,12 +1336,12 @@ async def run_standardise(request: StandardiseRequest) -> None:
         if has_bbox:
             bbox_sql = "bbox"
         else:
-            bbox_sql = """
+            bbox_sql = f"""
                 struct_pack(
-                    xmin := ST_XMin(ST_GeomFromWKB(geometry)),
-                    ymin := ST_YMin(ST_GeomFromWKB(geometry)),
-                    xmax := ST_XMax(ST_GeomFromWKB(geometry)),
-                    ymax := ST_YMax(ST_GeomFromWKB(geometry))
+                    xmin := ST_XMin({geom_expr}),
+                    ymin := ST_YMin({geom_expr}),
+                    xmax := ST_XMax({geom_expr}),
+                    ymax := ST_YMax({geom_expr})
                 ) AS bbox
             """
 
@@ -1367,7 +1368,7 @@ async def run_standardise(request: StandardiseRequest) -> None:
             COPY (
                 SELECT
                     {col_select},
-                    ST_SetCRS(ST_GeomFromWKB(geometry), 'EPSG:4326') AS geometry,
+                    ST_SetCRS({geom_expr}, 'EPSG:4326') AS geometry,
                     {bbox_sql}
                 FROM merged
                 {order_clause}

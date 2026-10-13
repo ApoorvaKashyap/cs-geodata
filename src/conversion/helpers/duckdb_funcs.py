@@ -55,3 +55,27 @@ def init_duckdb() -> DuckDBPyConnection:
         return conn
     except Exception as e:
         raise RuntimeError(f"Failed to initialize DuckDB: {e}") from e
+
+
+def get_duckdb_geom_expr(
+    conn: DuckDBPyConnection, table_or_view: str = "merged"
+) -> str:
+    """Return SQL expression to access geometry as a DuckDB GEOMETRY.
+
+    If the geometry column is already typed as GEOMETRY (e.g. from GeoParquet),
+    returns 'geometry'. If it is a binary WKB blob, returns 'ST_GeomFromWKB(geometry)'.
+
+    Args:
+        conn: Active DuckDB connection.
+        table_or_view (str): Table or view name to inspect. Defaults to "merged".
+
+    Returns:
+        SQL expression string to reference geometry as a GEOMETRY object.
+
+    """
+    row = conn.execute(
+        f"SELECT column_type FROM (DESCRIBE {table_or_view}) WHERE lower(column_name) = 'geometry'"
+    ).fetchone()
+    if row and row[0].upper().startswith("GEOMETRY"):
+        return "geometry"
+    return "ST_GeomFromWKB(geometry)"
